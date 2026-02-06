@@ -27,6 +27,10 @@
                 <button id="export-btn" class="btn btn-primary" disabled>
                     <span>📥</span> Export
                 </button>
+                <select id="annotation-mode-select" class="mode-select" title="Annotation Mode">
+                    <option value="range">📏 Range</option>
+                    <option value="pin">📍 Pin</option>
+                </select>
                 <button id="settings-btn" class="btn btn-icon" title="Settings">
                     ⚙️
                 </button>
@@ -112,12 +116,21 @@
 
                 <!-- Controls -->
                 <div class="annotation-controls">
-                    <button id="start-annotation-btn" class="btn btn-success btn-large" disabled>
-                        <span>▶</span> Start (S)
-                    </button>
-                    <button id="end-annotation-btn" class="btn btn-danger btn-large" disabled>
-                        <span>⏹</span> End (E)
-                    </button>
+                    <!-- Range Mode Controls -->
+                    <div id="range-mode-controls" class="mode-controls">
+                        <button id="start-annotation-btn" class="btn btn-success btn-large" disabled>
+                            <span>▶</span> Start (S)
+                        </button>
+                        <button id="end-annotation-btn" class="btn btn-danger btn-large" disabled>
+                            <span>⏹</span> End (E)
+                        </button>
+                    </div>
+                    <!-- Pin Mode Controls -->
+                    <div id="pin-mode-controls" class="mode-controls" style="display: none;">
+                        <button id="pin-annotation-btn" class="btn btn-accent btn-large" disabled>
+                            <span>📍</span> Pin (M)
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Horizontal Resize Handle -->
@@ -141,8 +154,8 @@
             <div class="keyboard-hints">
                 <span><kbd>Space</kbd> Play/Pause</span>
                 <span><kbd>←</kbd><kbd>→</kbd> Frame</span>
-                <span><kbd>S</kbd> Start</span>
-                <span><kbd>E</kbd> End</span>
+                <span id="hint-range"><kbd>S</kbd> Start <kbd>E</kbd> End</span>
+                <span id="hint-pin" style="display: none;"><kbd>M</kbd> Pin</span>
             </div>
         </footer>
 
@@ -193,6 +206,7 @@
                 <div class="settings-tabs">
                     <button class="settings-tab active" data-tab="layers">Layers</button>
                     <button class="settings-tab" data-tab="modalities">Modalities</button>
+                    <button class="settings-tab" data-tab="pinmode">Pin Mode</button>
                     <button class="settings-tab" data-tab="layout">Layout</button>
                 </div>
                 
@@ -217,6 +231,23 @@
                         </div>
                     </div>
                     
+                    <!-- Pin Mode Settings Pane -->
+                    <div id="pinmode-settings" class="settings-pane" style="display: none;">
+                        <p class="settings-intro">Configure Pin Mode annotation window.</p>
+                        <div class="pinmode-config">
+                            <label>Window Size:</label>
+                            <div class="window-input-group">
+                                <input type="number" id="pin-window-value" value="1" min="0" step="1" class="window-input">
+                                <select id="pin-window-unit" class="window-unit-select">
+                                    <option value="frames" selected>frames</option>
+                                    <option value="seconds">seconds</option>
+                                    <option value="ms">milliseconds</option>
+                                </select>
+                            </div>
+                            <p class="settings-hint">Annotation will span from current frame ± this window.</p>
+                        </div>
+                    </div>
+                    
                     <!-- Layout Settings Pane -->
                     <div id="layout-settings" class="settings-pane" style="display: none;">
                         <p class="settings-intro">Adjust panel sizes by dragging the resize handles.</p>
@@ -238,5 +269,6 @@
     </div>
 
     <script src="app.js"></script>
+    <script src="tests.js"></script>
 </body>
 </html>

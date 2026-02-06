@@ -112,7 +112,12 @@ const state = {
     
     // UI State
     settingsOpen: false,
-    settingsTab: 'layers', // 'layers' | 'modalities'
+    settingsTab: 'layers',
+    
+    // Pin Mode
+    annotationMode: 'range', // 'range' | 'pin'
+    pinWindowValue: 1,
+    pinWindowUnit: 'frames', // 'frames' | 'seconds' | 'ms'
 };
 
 // ============================================
@@ -193,6 +198,16 @@ function loadState() {
     state.annotatorName = localStorage.getItem('nova_annotator_name') || '';
     const nameInput = document.getElementById('annotator-name');
     if (nameInput) nameInput.value = state.annotatorName;
+    
+    // Load Pin Mode settings
+    state.pinWindowValue = parseFloat(localStorage.getItem('nova_pin_window_value')) || 1;
+    state.pinWindowUnit = localStorage.getItem('nova_pin_window_unit') || 'frames';
+    
+    // Sync UI with loaded settings
+    const windowValueInput = document.getElementById('pin-window-value');
+    const windowUnitSelect = document.getElementById('pin-window-unit');
+    if (windowValueInput) windowValueInput.value = state.pinWindowValue;
+    if (windowUnitSelect) windowUnitSelect.value = state.pinWindowUnit;
 }
 
 function saveLayers() {
@@ -267,6 +282,18 @@ function setupEventListeners() {
     // Keyboard
     document.addEventListener('keydown', handleKeyPress);
     window.addEventListener('resize', () => requestAnimationFrame(renderTimelines));
+    
+    // Pin Mode
+    document.getElementById('annotation-mode-select')?.addEventListener('change', handleAnnotationModeChange);
+    document.getElementById('pin-annotation-btn')?.addEventListener('click', pinAnnotation);
+    document.getElementById('pin-window-value')?.addEventListener('change', (e) => {
+        state.pinWindowValue = parseFloat(e.target.value) || 1;
+        localStorage.setItem('nova_pin_window_value', state.pinWindowValue);
+    });
+    document.getElementById('pin-window-unit')?.addEventListener('change', (e) => {
+        state.pinWindowUnit = e.target.value;
+        localStorage.setItem('nova_pin_window_unit', state.pinWindowUnit);
+    });
     
     // Panel resizer
     setupPanelResizer();
@@ -1573,23 +1600,113 @@ function endAnnotation() {
     updateAnnotationControls();
 }
 
+// ============================================
+// Pin Mode Functions
+// ============================================
+
+function handleAnnotationModeChange(e) {
+    state.annotationMode = e.target.value;
+    
+    // Toggle UI visibility
+    const rangeControls = document.getElementById('range-mode-controls');
+    const pinControls = document.getElementById('pin-mode-controls');
+    const hintRange = document.getElementById('hint-range');
+    const hintPin = document.getElementById('hint-pin');
+    
+    if (state.annotationMode === 'pin') {
+        if (rangeControls) rangeControls.style.display = 'none';
+        if (pinControls) pinControls.style.display = 'flex';
+        if (hintRange) hintRange.style.display = 'none';
+        if (hintPin) hintPin.style.display = 'inline';
+        // Clear any pending range annotation
+        state.pendingStart = null;
+    } else {
+        if (rangeControls) rangeControls.style.display = 'flex';
+        if (pinControls) pinControls.style.display = 'none';
+        if (hintRange) hintRange.style.display = 'inline';
+        if (hintPin) hintPin.style.display = 'none';
+    }
+    
+    updateAnnotationControls();
+}
+
+function getWindowDurationMs() {
+    const value = state.pinWindowValue;
+    const unit = state.pinWindowUnit;
+    
+    switch (unit) {
+        case 'frames':
+            return (value / state.fps) * 1000;
+        case 'seconds':
+            return value * 1000;
+        case 'ms':
+            return value;
+        default:
+            return (1 / state.fps) * 1000; // Default to 1 frame
+    }
+}
+
+function pinAnnotation() {
+    if (!state.selectedType) return;
+    
+    const windowMs = getWindowDurationMs();
+    const currentTimeMs = state.currentTime;
+    
+    // Calculate start and end times with window
+    const startTimeMs = Math.max(0, currentTimeMs - windowMs / 2);
+    const endTimeMs = Math.min(state.duration, currentTimeMs + windowMs / 2);
+    
+    // Ensure end > start (at minimum 1 frame difference)
+    const minDuration = (1 / state.fps) * 1000;
+    const finalEndMs = Math.max(endTimeMs, startTimeMs + minDuration);
+    
+    const record = {
+        id: Date.now(),
+        typeId: state.selectedType.id,
+        typeName: state.selectedType.name,
+        startTime: startTimeMs / 1000,
+        endTime: finalEndMs / 1000,
+        layerId: state.activeLayerId,
+        isPinned: true, // Mark as pin annotation for visual distinction
+    };
+    
+    // Ensure annotations array exists
+    if (!state.annotations[state.activeLayerId]) {
+        state.annotations[state.activeLayerId] = [];
+    }
+    
+    state.annotations[state.activeLayerId].push(record);
+    state.annotations[state.activeLayerId].sort((a, b) => a.startTime - b.startTime);
+    
+    renderAnnotationsList();
+    renderTimelines();
+    updateAnnotationControls();
+}
+
 function updateAnnotationControls() {
     const hasVideo = state.duration > 0;
     const hasType = state.selectedType !== null;
     const isRecording = state.pendingStart !== null;
     
+    // Range Mode controls
     const startBtn = document.getElementById('start-annotation-btn');
     const endBtn = document.getElementById('end-annotation-btn');
     
     if (startBtn) startBtn.disabled = !hasVideo || !hasType || isRecording;
     if (endBtn) endBtn.disabled = !isRecording;
     
+    // Pin Mode controls
+    const pinBtn = document.getElementById('pin-annotation-btn');
+    if (pinBtn) pinBtn.disabled = !hasVideo || !hasType;
+    
+    // Status display
     const status = document.getElementById('annotation-status');
     if (status) {
-        if (isRecording) {
+        if (isRecording && state.annotationMode === 'range') {
             status.innerHTML = `<div class="status-recording"><span class="recording-indicator"></span>Recording: ${state.selectedType.name}</div>`;
         } else if (hasType) {
-            status.innerHTML = `<div class="status-idle"><p>Selected: <strong>${state.selectedType.name}</strong></p></div>`;
+            const modeHint = state.annotationMode === 'pin' ? 'Press M or click Pin' : 'Press S to start';
+            status.innerHTML = `<div class="status-idle"><p>Selected: <strong>${state.selectedType.name}</strong></p><p class="status-hint">${modeHint}</p></div>`;
         } else {
             status.innerHTML = `<div class="status-idle"><p>Select a type above</p></div>`;
         }
@@ -1816,11 +1933,15 @@ function handleKeyPress(e) {
             break;
         case 's':
             e.preventDefault();
-            startAnnotation();
+            if (state.annotationMode === 'range') startAnnotation();
             break;
         case 'e':
             e.preventDefault();
-            endAnnotation();
+            if (state.annotationMode === 'range') endAnnotation();
+            break;
+        case 'm':
+            e.preventDefault();
+            if (state.annotationMode === 'pin') pinAnnotation();
             break;
         default:
             const num = parseInt(e.key);

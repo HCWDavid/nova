@@ -1,0 +1,12 @@
+{
+  "name": "nova",
+  "version": "0.2.1",
+  "description": "NOVA - Nursing Operational View of Actions - Multi-Modal Video Annotation Tool",
+  "main": "app.js",
+  "scripts": {
+    "test": "node tests/run-tests.js"
+  },
+  "keywords": ["video", "annotation", "nursing", "gaze", "multimodal"],
+  "author": "",
+  "license": "MIT"
+}

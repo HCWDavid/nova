@@ -1580,3 +1580,116 @@ body.resize-mode .resize-mode-overlay {
     padding: var(--spacing-xs);
     color: var(--text-primary);
 }
+
+/* ============================================
+   Pin Mode Styles
+   ============================================ */
+
+/* Mode Selector in Header */
+.mode-select {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.mode-select:hover {
+    border-color: var(--primary);
+}
+
+.mode-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+}
+
+/* Mode Controls Container */
+.mode-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    width: 100%;
+}
+
+/* Accent Button for Pin */
+.btn-accent {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.btn-accent:hover:not(:disabled) {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    transform: translateY(-1px);
+}
+
+.btn-accent:disabled {
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+}
+
+/* Pin Mode Settings */
+.pinmode-config {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+}
+
+.pinmode-config label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+    color: var(--text-primary);
+}
+
+.window-input-group {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.window-input {
+    width: 80px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm);
+    color: var(--text-primary);
+    font-size: 1rem;
+    text-align: center;
+}
+
+.window-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.window-unit-select {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.window-unit-select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.settings-hint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.status-hint {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-top: var(--spacing-xs);
+}
