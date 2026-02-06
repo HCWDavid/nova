@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOVA v0.2 | Multi-Modal Video Annotation</title>
+    <meta name="description" content="NOVA - Multi-modal nursing video annotation with gaze overlay support">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Pako for gzip decompression -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">⭐</span>
+                <h1>NOVA</h1>
+                <span class="version-badge">v0.2</span>
+            </div>
+            <div class="header-controls">
+                <div class="annotator-info">
+                    <label>Annotator:</label>
+                    <input type="text" id="annotator-name" placeholder="Your name" value="">
+                </div>
+                <button id="export-btn" class="btn btn-primary" disabled>
+                    <span>📥</span> Export
+                </button>
+                <button id="settings-btn" class="btn btn-icon" title="Settings">
+                    ⚙️
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Video/Modalities Section -->
+            <section class="video-section">
+                <!-- Modalities Container (videos with overlays) -->
+                <div id="modalities-container" class="modalities-container">
+                    <!-- Dynamically generated -->
+                </div>
+
+                <!-- Add Modality Bar -->
+                <div class="add-modality-bar">
+                    <button id="add-modality-btn" class="btn btn-secondary">
+                        <span>➕</span> Add Data
+                    </button>
+                    <input type="file" id="add-modality-input" accept="video/*,.mp4,.mov,.avi,.webm,.csv,.tsv,.txt,.jsonl,.gz" hidden multiple>
+                </div>
+
+                <!-- Video Controls -->
+                <div class="video-controls">
+                    <div class="playback-controls">
+                        <button id="play-pause-btn" class="control-btn" title="Play/Pause (Space)">
+                            <span id="play-icon">▶</span>
+                        </button>
+                        <button id="frame-back-btn" class="control-btn small" title="Previous Frame (←)">⏮</button>
+                        <button id="frame-forward-btn" class="control-btn small" title="Next Frame (→)">⏭</button>
+                        <span class="time-display">
+                            <span id="current-time">00:00:00.000</span>
+                            <span class="time-separator">/</span>
+                            <span id="duration">00:00:00.000</span>
+                        </span>
+                        <span class="frame-display">
+                            Frame: <span id="current-frame">0</span>
+                        </span>
+                    </div>
+                    <div class="speed-controls">
+                        <label>Speed:</label>
+                        <select id="playback-speed">
+                            <option value="0.25">0.25x</option>
+                            <option value="0.5">0.5x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="2">2x</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Annotation Timelines -->
+                <div class="timeline-section">
+                    <div id="timelines-container">
+                        <!-- Dynamically generated -->
+                    </div>
+                    <input type="range" id="seek-slider" min="0" max="100" value="0" step="0.1">
+                </div>
+            </section>
+
+            <!-- Resize Handle -->
+            <div id="panel-resizer" class="panel-resizer"></div>
+
+            <!-- Annotation Panel -->
+            <aside class="annotation-panel">
+                <!-- Layer Tabs -->
+                <div id="mode-tabs" class="mode-tabs">
+                    <!-- Dynamically generated -->
+                </div>
+
+                <!-- Annotation Types -->
+                <div class="annotation-types" id="annotation-types">
+                    <!-- Dynamically generated -->
+                </div>
+
+                <!-- Status -->
+                <div class="annotation-status" id="annotation-status">
+                    <div class="status-idle">
+                        <p>Select a type and press <kbd>S</kbd> to start</p>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="annotation-controls">
+                    <button id="start-annotation-btn" class="btn btn-success btn-large" disabled>
+                        <span>▶</span> Start (S)
+                    </button>
+                    <button id="end-annotation-btn" class="btn btn-danger btn-large" disabled>
+                        <span>⏹</span> End (E)
+                    </button>
+                </div>
+
+                <!-- Horizontal Resize Handle -->
+                <div id="annotations-resizer" class="horizontal-resizer"></div>
+
+                <!-- Annotations List -->
+                <div class="annotations-list-container">
+                    <h3>Annotations <span id="annotation-count">(0)</span></h3>
+                    <div class="annotations-list" id="annotations-list">
+                        <!-- Dynamically generated -->
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="footer-info">
+                <span id="modality-count">0 modalities</span>
+            </div>
+            <div class="keyboard-hints">
+                <span><kbd>Space</kbd> Play/Pause</span>
+                <span><kbd>←</kbd><kbd>→</kbd> Frame</span>
+                <span><kbd>S</kbd> Start</span>
+                <span><kbd>E</kbd> End</span>
+            </div>
+        </footer>
+
+        <!-- Floating Resize Mode Indicator -->
+        <div id="resize-mode-overlay" class="resize-mode-overlay">
+            <span>📐 Resize Mode</span>
+            <p>Drag the blue handles to resize panels</p>
+            <button id="floating-exit-resize" class="btn btn-success">✓ Done</button>
+        </div>
+
+        <!-- Data Type Picker Overlay -->
+        <div id="data-type-picker" class="floating-picker">
+            <span id="picker-title">📊 Select Data Type</span>
+            <p id="picker-filename">filename.csv</p>
+            <div class="picker-options">
+                <button class="picker-option" data-type="overlay-gaze">
+                    <span>👁</span> Gaze
+                </button>
+                <button class="picker-option" data-type="overlay-heatmap">
+                    <span>🔥</span> Heatmap
+                </button>
+                <button class="picker-option" data-type="timeseries-imu">
+                    <span>📈</span> IMU
+                </button>
+            </div>
+            <button id="picker-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+
+        <!-- Parent Video Picker Overlay -->
+        <div id="video-picker" class="floating-picker">
+            <span>🎬 Select Parent Video</span>
+            <p id="video-picker-info">Which video should this overlay attach to?</p>
+            <div id="video-picker-options" class="picker-options">
+                <!-- Dynamically populated -->
+            </div>
+            <button id="video-picker-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>⚙️ Settings</h2>
+                    <button id="settings-close" class="modal-close">×</button>
+                </div>
+                
+                <!-- Settings Tabs -->
+                <div class="settings-tabs">
+                    <button class="settings-tab active" data-tab="layers">Layers</button>
+                    <button class="settings-tab" data-tab="modalities">Modalities</button>
+                    <button class="settings-tab" data-tab="layout">Layout</button>
+                </div>
+                
+                <div class="modal-body">
+                    <!-- Layers Settings Pane -->
+                    <div id="layers-settings" class="settings-pane">
+                        <p class="settings-intro">Configure annotation layers and their types.</p>
+                        <div id="layers-list" class="layers-list">
+                            <!-- Dynamically generated -->
+                        </div>
+                        <div class="settings-actions">
+                            <button id="add-layer-btn" class="btn btn-secondary">➕ Add Layer</button>
+                            <button id="reset-layers-btn" class="btn btn-danger-outline">↻ Reset Defaults</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Modalities Settings Pane -->
+                    <div id="modalities-settings" class="settings-pane" style="display: none;">
+                        <p class="settings-intro">Manage video streams and overlay modalities. Adjust offsets for synchronization.</p>
+                        <div id="modalities-list" class="modalities-list">
+                            <!-- Dynamically generated -->
+                        </div>
+                    </div>
+                    
+                    <!-- Layout Settings Pane -->
+                    <div id="layout-settings" class="settings-pane" style="display: none;">
+                        <p class="settings-intro">Adjust panel sizes by dragging the resize handles.</p>
+                        <div class="layout-controls">
+                            <button id="toggle-resize-mode" class="btn btn-primary btn-large">
+                                <span>📐</span> Enter Resize Mode
+                            </button>
+                            <p class="resize-hint" id="resize-hint" style="display: none;">
+                                Drag the blue handles to resize panels, then click "Done" below.
+                            </p>
+                            <button id="exit-resize-mode" class="btn btn-success btn-large" style="display: none;">
+                                ✓ Done Resizing
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
