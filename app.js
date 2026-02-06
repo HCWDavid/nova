@@ -1783,10 +1783,12 @@ function switchSettingsTab(tab) {
 function renderSettings() {
     const layersPane = document.getElementById('layers-settings');
     const modalitiesPane = document.getElementById('modalities-settings');
+    const pinmodePane = document.getElementById('pinmode-settings');
     const layoutPane = document.getElementById('layout-settings');
     
     if (layersPane) layersPane.style.display = state.settingsTab === 'layers' ? 'block' : 'none';
     if (modalitiesPane) modalitiesPane.style.display = state.settingsTab === 'modalities' ? 'block' : 'none';
+    if (pinmodePane) pinmodePane.style.display = state.settingsTab === 'pinmode' ? 'block' : 'none';
     if (layoutPane) layoutPane.style.display = state.settingsTab === 'layout' ? 'block' : 'none';
     
     if (state.settingsTab === 'layers') {
@@ -1794,7 +1796,7 @@ function renderSettings() {
     } else if (state.settingsTab === 'modalities') {
         renderModalitiesSettings();
     }
-    // Layout tab is static HTML, no dynamic rendering needed
+    // Layout and Pin Mode tabs are static HTML, no dynamic rendering needed
 }
 
 function renderLayersSettings() {

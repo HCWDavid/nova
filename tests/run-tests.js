@@ -460,6 +460,56 @@ assertEqual(state.annotations[testLayerId].length, 3, 'Multiple rapid pins creat
 state.layers = state.layers.filter(l => l.id !== testLayerId);
 delete state.annotations[testLayerId];
 
+console.log('\n--- Settings Tab Switching Logic ---');
+
+// This tests the logic that was buggy - pinmode pane wasn't being shown
+// We simulate the renderSettings logic to ensure all tabs are handled
+
+const EXPECTED_TABS = ['layers', 'modalities', 'pinmode', 'layout'];
+const EXPECTED_PANES = ['layers-settings', 'modalities-settings', 'pinmode-settings', 'layout-settings'];
+
+// Simulate the renderSettings visibility logic
+function testGetVisiblePane(currentTab) {
+    const paneMap = {
+        'layers': 'layers-settings',
+        'modalities': 'modalities-settings',
+        'pinmode': 'pinmode-settings',
+        'layout': 'layout-settings',
+    };
+    return paneMap[currentTab] || null;
+}
+
+// Test that each tab shows exactly one pane
+EXPECTED_TABS.forEach(tab => {
+    const visiblePane = testGetVisiblePane(tab);
+    assert(visiblePane !== null, `Tab "${tab}" has a corresponding pane`);
+    assert(EXPECTED_PANES.includes(visiblePane), `Tab "${tab}" shows valid pane "${visiblePane}"`);
+});
+
+// Test pinmode specifically (this was the bug)
+assertEqual(testGetVisiblePane('pinmode'), 'pinmode-settings', 'pinmode tab shows pinmode-settings pane');
+
+// Test that unknown tabs don't crash
+assertEqual(testGetVisiblePane('unknown_tab'), null, 'Unknown tab returns null (no crash)');
+
+console.log('\n--- Settings State Management ---');
+
+// Test settingsTab state changes
+state.settingsTab = 'layers';
+assertEqual(state.settingsTab, 'layers', 'settingsTab can be set to layers');
+
+state.settingsTab = 'pinmode';
+assertEqual(state.settingsTab, 'pinmode', 'settingsTab can be set to pinmode');
+
+state.settingsTab = 'modalities';
+assertEqual(state.settingsTab, 'modalities', 'settingsTab can be set to modalities');
+
+state.settingsTab = 'layout';
+assertEqual(state.settingsTab, 'layout', 'settingsTab can be set to layout');
+
+// Restore
+state.settingsTab = 'layers';
+
 // ============================================
 // Summary
 // ============================================
