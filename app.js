@@ -1429,7 +1429,10 @@ function handleSpeedChange() {
 }
 
 function handleSeek() {
-    const time = parseFloat(document.getElementById('seek-slider').value);
+    const slider = document.getElementById('seek-slider');
+    if (!slider) return;
+    
+    const time = parseFloat(slider.value);
     state.currentTime = time;
     
     state.modalities.filter(m => m.type === 'video').forEach(mod => {
@@ -1439,6 +1442,9 @@ function handleSeek() {
             el.currentTime = Math.max(0, localTime);
         }
     });
+    
+    // Update playhead position on timelines
+    requestAnimationFrame(renderTimelines);
 }
 
 // ============================================

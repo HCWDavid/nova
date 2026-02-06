@@ -798,7 +798,9 @@ body.resize-mode .resize-mode-overlay {
 .annotations-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0 var(--spacing-md) var(--spacing-md);
+    min-height: 0; /* Allow flex child to shrink */
 }
 
 .annotation-item {

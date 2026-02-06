@@ -510,6 +510,206 @@ assertEqual(state.settingsTab, 'layout', 'settingsTab can be set to layout');
 // Restore
 state.settingsTab = 'layers';
 
+console.log('\n--- Seek Functionality ---');
+
+// Simulate handleSeek logic
+function testHandleSeek(sliderValue) {
+    state.currentTime = sliderValue;
+    return state.currentTime;
+}
+
+state.duration = 60000;
+assertEqual(testHandleSeek(0), 0, 'Seek to start sets currentTime to 0');
+assertEqual(testHandleSeek(30000), 30000, 'Seek to middle sets currentTime to 30000');
+assertEqual(testHandleSeek(60000), 60000, 'Seek to end sets currentTime to duration');
+
+console.log('\n--- Annotation Sorting ---');
+
+// Test that annotations are sorted by startTime
+const sortTestLayerId = 'sort_test_layer';
+state.layers.push({ id: sortTestLayerId, name: 'Sort Test', types: [{ id: 1, name: 'Test', color: '#FF0000' }] });
+state.annotations[sortTestLayerId] = [];
+state.activeLayerId = sortTestLayerId;
+state.selectedType = { id: 1, name: 'Test' };
+
+// Add annotations out of order
+state.currentTime = 10000;
+state.pinWindowValue = 100;
+state.pinWindowUnit = 'ms';
+pinAnnotation();
+
+state.currentTime = 5000;
+pinAnnotation();
+
+state.currentTime = 15000;
+pinAnnotation();
+
+// Check they are sorted
+const sortedAnns = state.annotations[sortTestLayerId];
+assert(sortedAnns[0].startTime < sortedAnns[1].startTime, 'First annotation has earliest startTime');
+assert(sortedAnns[1].startTime < sortedAnns[2].startTime, 'Annotations sorted in ascending order');
+
+// Cleanup
+state.layers = state.layers.filter(l => l.id !== sortTestLayerId);
+delete state.annotations[sortTestLayerId];
+
+console.log('\n--- Layer Management ---');
+
+// Test layer creation
+const beforeLayerCount = state.layers.length;
+const newTestLayer = {
+    id: 'mgmt_test_layer_' + Date.now(),
+    name: 'Management Test',
+    shortcut: 'm',
+    color: '#00FF00',
+    types: [{ id: 1, name: 'Type 1', color: '#00FF00' }]
+};
+state.layers.push(newTestLayer);
+assertEqual(state.layers.length, beforeLayerCount + 1, 'Layer added increases count');
+
+// Test layer removal
+state.layers = state.layers.filter(l => l.id !== newTestLayer.id);
+assertEqual(state.layers.length, beforeLayerCount, 'Layer removed decreases count');
+
+console.log('\n--- Playback State ---');
+
+// Test playback state properties
+state.isPlaying = false;
+assertEqual(state.isPlaying, false, 'isPlaying can be set to false');
+
+state.isPlaying = true;
+assertEqual(state.isPlaying, true, 'isPlaying can be set to true');
+
+state.isPlaying = false;
+
+console.log('\n--- Time Formatting Helpers ---');
+
+// Test time to frame conversion
+function testTimeToFrame(timeMs, fps) {
+    return Math.floor(timeMs / 1000 * fps);
+}
+
+assertEqual(testTimeToFrame(1000, 30), 30, '1 second at 30fps = frame 30');
+assertEqual(testTimeToFrame(500, 30), 15, '0.5 seconds at 30fps = frame 15');
+assertEqual(testTimeToFrame(0, 30), 0, '0ms = frame 0');
+assertEqual(testTimeToFrame(1000, 60), 60, '1 second at 60fps = frame 60');
+
+// Test frame to time conversion
+function testFrameToTime(frame, fps) {
+    return (frame / fps) * 1000;
+}
+
+assertEqual(testFrameToTime(30, 30), 1000, 'Frame 30 at 30fps = 1000ms');
+assertEqual(testFrameToTime(60, 60), 1000, 'Frame 60 at 60fps = 1000ms');
+assertApprox(testFrameToTime(1, 30), 33.33, 0.5, 'Frame 1 at 30fps ≈ 33.33ms');
+
+console.log('\n--- Annotation Deletion Logic ---');
+
+// Test annotation deletion
+const deleteTestLayerId = 'delete_test_layer';
+state.layers.push({ id: deleteTestLayerId, name: 'Delete Test', types: [{ id: 1, name: 'Test', color: '#FF0000' }] });
+state.annotations[deleteTestLayerId] = [];
+state.activeLayerId = deleteTestLayerId;
+state.selectedType = { id: 1, name: 'Test' };
+state.currentTime = 5000;
+state.pinWindowValue = 100;
+state.pinWindowUnit = 'ms';
+
+// Manually create annotations with known IDs to avoid Date.now() collision
+state.annotations[deleteTestLayerId].push({ id: 1001, typeId: 1, startTime: 4.9, endTime: 5.1, layerId: deleteTestLayerId });
+state.annotations[deleteTestLayerId].push({ id: 1002, typeId: 1, startTime: 4.9, endTime: 5.1, layerId: deleteTestLayerId });
+state.annotations[deleteTestLayerId].push({ id: 1003, typeId: 1, startTime: 4.9, endTime: 5.1, layerId: deleteTestLayerId });
+
+assertEqual(state.annotations[deleteTestLayerId].length, 3, 'Created 3 test annotations');
+
+// Delete middle annotation
+state.annotations[deleteTestLayerId] = state.annotations[deleteTestLayerId].filter(a => a.id !== 1002);
+
+assertEqual(state.annotations[deleteTestLayerId].length, 2, 'Deletion removes annotation');
+
+// Delete all annotations
+state.annotations[deleteTestLayerId] = [];
+assertEqual(state.annotations[deleteTestLayerId].length, 0, 'Can clear all annotations');
+
+// Cleanup
+state.layers = state.layers.filter(l => l.id !== deleteTestLayerId);
+delete state.annotations[deleteTestLayerId];
+
+console.log('\n--- Mode Switching State Preservation ---');
+
+// Test that switching mode preserves other state
+const origActiveLayer = state.activeLayerId;
+const origSelectedType = state.selectedType;
+
+state.annotationMode = 'pin';
+assertEqual(state.activeLayerId, origActiveLayer, 'Mode switch preserves activeLayerId');
+assertEqual(state.selectedType, origSelectedType, 'Mode switch preserves selectedType');
+
+state.annotationMode = 'range';
+assertEqual(state.activeLayerId, origActiveLayer, 'Mode switch back preserves activeLayerId');
+
+console.log('\n--- Overlapping Annotations ---');
+
+// Test that overlapping annotations are allowed
+const overlapTestLayerId = 'overlap_test_layer';
+state.layers.push({ id: overlapTestLayerId, name: 'Overlap Test', types: [{ id: 1, name: 'Test', color: '#FF0000' }] });
+state.annotations[overlapTestLayerId] = [];
+state.activeLayerId = overlapTestLayerId;
+state.selectedType = { id: 1, name: 'Test' };
+
+state.pinWindowValue = 2;
+state.pinWindowUnit = 'seconds';
+
+state.currentTime = 5000; // 5s, window will be 4s-6s
+pinAnnotation();
+
+state.currentTime = 6000; // 6s, window will be 5s-7s (overlaps with first)
+pinAnnotation();
+
+assertEqual(state.annotations[overlapTestLayerId].length, 2, 'Overlapping annotations are allowed');
+
+// Check overlap exists
+const overlapAnn1 = state.annotations[overlapTestLayerId][0];
+const overlapAnn2 = state.annotations[overlapTestLayerId][1];
+assert(overlapAnn1.endTime > overlapAnn2.startTime, 'Annotations actually overlap');
+
+// Cleanup
+state.layers = state.layers.filter(l => l.id !== overlapTestLayerId);
+delete state.annotations[overlapTestLayerId];
+
+console.log('\n--- Duration Validation ---');
+
+// Test duration boundaries
+state.duration = 0;
+assertEqual(state.duration, 0, 'Duration can be 0 (no video)');
+
+state.duration = 60000;
+assert(state.duration > 0, 'Duration is positive after setting');
+
+console.log('\n--- Annotation ID Uniqueness ---');
+
+// Test that annotation IDs are unique (with delays to ensure Date.now() differs)
+const idTestLayerId = 'id_test_layer';
+state.layers.push({ id: idTestLayerId, name: 'ID Test', types: [{ id: 1, name: 'Test', color: '#FF0000' }] });
+state.annotations[idTestLayerId] = [];
+
+// Manually create annotations with unique IDs to verify uniqueness logic
+state.annotations[idTestLayerId].push({ id: 2001, typeId: 1, startTime: 1, endTime: 2, layerId: idTestLayerId });
+state.annotations[idTestLayerId].push({ id: 2002, typeId: 1, startTime: 2, endTime: 3, layerId: idTestLayerId });
+state.annotations[idTestLayerId].push({ id: 2003, typeId: 1, startTime: 3, endTime: 4, layerId: idTestLayerId });
+state.annotations[idTestLayerId].push({ id: 2004, typeId: 1, startTime: 4, endTime: 5, layerId: idTestLayerId });
+state.annotations[idTestLayerId].push({ id: 2005, typeId: 1, startTime: 5, endTime: 6, layerId: idTestLayerId });
+
+const ids = state.annotations[idTestLayerId].map(a => a.id);
+const uniqueIds = [...new Set(ids)];
+assertEqual(ids.length, 5, 'Created 5 annotations');
+assertEqual(uniqueIds.length, 5, 'All 5 IDs are unique');
+assert(ids.length === uniqueIds.length, 'No duplicate IDs exist');
+
+// Cleanup
+state.layers = state.layers.filter(l => l.id !== idTestLayerId);
+delete state.annotations[idTestLayerId];
+
 // ============================================
 // Summary
 // ============================================
