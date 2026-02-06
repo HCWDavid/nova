@@ -14,9 +14,11 @@
  * - unit test and consistent 
  * - scoping into two minuates from 15 mins
  * - change layers => tracks
- * - mechanism: refresh page preventation while its not 'exported' 
- * - adding a new layer didnt work with the new layer, etc.
- * - having only 'start-end' button for 1 frame instead of two buttons (like a button call dot this frame or something)
+ * - mechanism: refresh page prevention while its not 'exported' 
+ * - having only 'start-end' button for 1 frame instead of two buttons (like a button call "mark this frame" or something)
+ * 
+ * FIXED:
+ * - [x] adding a new layer didn't work with the new layer annotation (v0.2.1 - initialized annotations array for new layers)
  * 
  * 
  * Question: 
@@ -1555,8 +1557,13 @@ function endAnnotation() {
         typeName: state.selectedType.name,
         startTime: state.pendingStart / 1000,
         endTime: endTime / 1000,
+        layerId: state.activeLayerId,
     };
     
+    // Ensure annotations array exists for this layer
+    if (!state.annotations[state.activeLayerId]) {
+        state.annotations[state.activeLayerId] = [];
+    }
     state.annotations[state.activeLayerId].push(record);
     state.annotations[state.activeLayerId].sort((a, b) => a.startTime - b.startTime);
     
@@ -1761,13 +1768,16 @@ window.addType = (layerId) => { const l = state.layers.find(x => x.id === layerI
 function handleAddLayer() {
     const name = prompt('Layer name:');
     if (name) {
+        const newLayerId = 'layer_' + Date.now();
         state.layers.push({
-            id: 'layer_' + Date.now(),
+            id: newLayerId,
             name,
             shortcut: name[0].toLowerCase(),
-            color: '#' + Math.floor(Math.random()*16777215).toString(16),
+            color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
             types: [{ id: 1, name: 'Type 1', color: '#888888' }]
         });
+        // Initialize annotations array for the new layer
+        state.annotations[newLayerId] = [];
         saveLayers();
         renderAll();
     }
