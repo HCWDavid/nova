@@ -35,55 +35,52 @@
 // Default Configurations
 // ============================================
 
-const DEFAULT_LAYERS = [
-    {
-        id: 'behavior',
-        name: 'Behaviors',
-        shortcut: 'b',
-        color: '#FF6B6B',
-        types: [
-            { id: 1, name: 'Introduction/Identification', color: '#FF6B6B' },
-            { id: 2, name: 'Assessment', color: '#4ECDC4' },
-            { id: 3, name: 'Administration', color: '#45B7D1' },
-        ]
-    },
-    {
-        id: 'action',
-        name: 'Actions',
-        shortcut: 'a',
-        color: '#74b9ff',
-        types: [
-            { id: 1, name: 'Introduce self to parents/patient', color: '#74b9ff' },
-            { id: 2, name: 'Perform hand hygiene (sanitizer)', color: '#a29bfe' },
-            { id: 3, name: 'Put on gloves', color: '#fd79a8' },
-            { id: 4, name: 'Verify patient/client identity', color: '#00b894' },
-            { id: 5, name: 'Check patient\'s wristband', color: '#e17055' },
-            { id: 6, name: 'Review document screen', color: '#00cec9' },
-            { id: 7, name: 'Check med name', color: '#6c5ce7' },
-            { id: 8, name: 'Review vital signs screen', color: '#fdcb6e' },
-            { id: 9, name: 'Assess vital signs (touch patient\'s wrist)', color: '#e84393' },
-            { id: 10, name: 'Measure apical pulse', color: '#0984e3' },
-            { id: 11, name: 'Measure temperature', color: '#d63031' },
-            { id: 12, name: 'Measure blood pressure (Click button on vital screen)', color: '#55a3ff' },
-            { id: 13, name: 'Calculating medication dosage (writing only)', color: '#81ecec' },
-            { id: 14, name: 'Use calculator/phone calculator', color: '#fab1a0' },
-            { id: 15, name: 'Prepare medication', color: '#74b9ff' },
-            { id: 16, name: 'Apply medication to patient', color: '#a29bfe' },
-            { id: 17, name: 'Writing', color: '#dfe6e9' },
-        ]
-    },
-    {
-        id: 'comm',
-        name: 'Communication',
-        shortcut: 'c',
-        color: '#4285F4',
-        types: [
-            { id: 1, name: 'Patient', color: '#4285F4' },
-            { id: 2, name: 'Family', color: '#34A853' },
-            { id: 3, name: 'Provider', color: '#FBBC05' },
-        ]
-    }
+// DEFAULT_LAYERS is loaded from config/default-layers.json at startup.
+// This inline fallback is used only if the fetch fails.
+let DEFAULT_LAYERS = [
+    { id: 'behavior', name: 'Behaviors', shortcut: 'b', color: '#FF6B6B', types: [
+        { id: 1, name: 'Introduction/Identification', color: '#FF6B6B' },
+        { id: 2, name: 'Assessment', color: '#4ECDC4' },
+        { id: 3, name: 'Med Administration', color: '#45B7D1' },
+    ]},
+    { id: 'action', name: 'Actions', shortcut: 'a', color: '#74b9ff', types: [
+        { id: 1, name: 'Introduce self to parents/patient', color: '#74b9ff' },
+        { id: 2, name: 'Perform hand hygiene (sanitizer)', color: '#a29bfe' },
+        { id: 3, name: 'Put on gloves', color: '#fd79a8' },
+        { id: 4, name: 'Check patient\'s wristband', color: '#e17055' },
+        { id: 5, name: 'Check Patient History Screen', color: '#00cec9' },
+        { id: 6, name: 'Examine Med Bottle', color: '#6c5ce7' },
+        { id: 7, name: 'Review vital signs screen', color: '#fdcb6e' },
+        { id: 8, name: 'Assess vital signs (touch patient\'s wrist)', color: '#e84393' },
+        { id: 9, name: 'Auscultate Lung Sounds', color: '#0984e3' },
+        { id: 10, name: 'Measure Apical Pulse', color: '#2d98da' },
+        { id: 11, name: 'Measure temperature', color: '#d63031' },
+        { id: 12, name: 'Measure blood pressure', color: '#55a3ff' },
+        { id: 13, name: 'Writing', color: '#81ecec' },
+        { id: 14, name: 'Use Calculator', color: '#fab1a0' },
+        { id: 15, name: 'Check Phone', color: '#ffeaa7' },
+        { id: 16, name: 'Prepare medication', color: '#74b9ff' },
+        { id: 17, name: 'Apply medication to patient', color: '#a29bfe' },
+    ]},
+    { id: 'comm', name: 'Communication', shortcut: 'c', color: '#4285F4', types: [
+        { id: 1, name: 'Patient', color: '#4285F4' },
+        { id: 2, name: 'Family', color: '#34A853' },
+        { id: 3, name: 'Provider', color: '#FBBC05' },
+    ]}
 ];
+
+// Load layers from external config (overrides fallback above)
+async function loadDefaultLayers() {
+    try {
+        const resp = await fetch('config/default-layers.json');
+        if (resp.ok) {
+            DEFAULT_LAYERS = await resp.json();
+            console.log('✅ Loaded default layers from config/default-layers.json');
+        }
+    } catch (e) {
+        console.warn('⚠️ Could not load config/default-layers.json, using inline fallback');
+    }
+}
 
 // ============================================
 // Application State
@@ -173,7 +170,8 @@ function createOverlayModality(type, parentVideoId, file) {
 // Initialization
 // ============================================
 
-function init() {
+async function init() {
+    await loadDefaultLayers();
     loadState();
     setupEventListeners();
     renderAll();
