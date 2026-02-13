@@ -1251,6 +1251,102 @@ assertEqual(largeStartOffset, -2500, 'Auto-align: gaze starts at 2.5s → offset
 const msOffset = testAutoAlign(500, 300500, 'ms', 300);
 assertEqual(msOffset, -500, 'Auto-align: ms timestamps starting at 500ms → offset = -500ms');
 
+console.log('\n--- Transcript Module ---');
+
+// formatTimestamp helper (replicated from app.js)
+function formatTimestamp(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// formatTimestamp tests
+assertEqual(formatTimestamp(0), '0:00', 'formatTimestamp: 0 → 0:00');
+assertEqual(formatTimestamp(65), '1:05', 'formatTimestamp: 65s → 1:05');
+assertEqual(formatTimestamp(3661), '61:01', 'formatTimestamp: 3661s → 61:01');
+assertEqual(formatTimestamp(0.5), '0:00', 'formatTimestamp: 0.5s → 0:00 (floor)');
+
+// Transcript JSON detection
+const validTranscript = {
+    video: "20240711T173527Z",
+    duration_s: 1449.0,
+    speakers: ["UNKNOWN"],
+    transcript: [
+        { start: 0.0, end: 10.96, speaker: null, text: "Hello there." },
+        { start: 12.32, end: 21.56, speaker: null, text: "How are you?" },
+        { start: 25.0, end: 30.0, speaker: "NURSE", text: "I'm fine." }
+    ]
+};
+
+assert(validTranscript.transcript && Array.isArray(validTranscript.transcript), 'Transcript detection: valid JSON has transcript array');
+assertEqual(validTranscript.transcript.length, 3, 'Transcript parsing: 3 segments');
+
+// Non-transcript JSON should not be detected
+const nonTranscript = { data: [1, 2, 3] };
+assert(!nonTranscript.transcript, 'Transcript detection: non-transcript JSON rejected');
+
+// Transcript data extraction
+function parseTranscript(data) {
+    return {
+        video: data.video || null,
+        duration: data.duration_s || null,
+        speakers: data.speakers || [],
+        segments: data.transcript || []
+    };
+}
+
+const parsed = parseTranscript(validTranscript);
+assertEqual(parsed.video, "20240711T173527Z", 'Transcript parse: video name extracted');
+assertEqual(parsed.duration, 1449.0, 'Transcript parse: duration extracted');
+assertEqual(parsed.speakers.length, 1, 'Transcript parse: speakers extracted');
+assertEqual(parsed.segments.length, 3, 'Transcript parse: segments extracted');
+
+// Segment active detection (time-based lookup)
+function findActiveSegment(segments, currentTimeSec) {
+    for (const seg of segments) {
+        if (currentTimeSec >= seg.start && currentTimeSec <= seg.end) {
+            return seg;
+        }
+    }
+    return null;
+}
+
+const segs = validTranscript.transcript;
+const active1 = findActiveSegment(segs, 5.0);
+assertEqual(active1.text, "Hello there.", 'Segment lookup: t=5s → first segment');
+
+const active2 = findActiveSegment(segs, 15.0);
+assertEqual(active2.text, "How are you?", 'Segment lookup: t=15s → second segment');
+
+const active3 = findActiveSegment(segs, 27.0);
+assertEqual(active3.speaker, "NURSE", 'Segment lookup: t=27s → third segment (with speaker)');
+
+// Gap between segments — no active segment
+const activeGap = findActiveSegment(segs, 11.5);
+assertEqual(activeGap, null, 'Segment lookup: t=11.5s → gap between segments');
+
+// Before first segment
+const activeBefore = findActiveSegment(segs, -1);
+assertEqual(activeBefore, null, 'Segment lookup: t=-1s → before transcript');
+
+// After last segment
+const activeAfter = findActiveSegment(segs, 999);
+assertEqual(activeAfter, null, 'Segment lookup: t=999s → after transcript');
+
+// Boundary precision
+const activeBoundary = findActiveSegment(segs, 10.96);
+assertEqual(activeBoundary.text, "Hello there.", 'Segment lookup: t=10.96s → exactly at end of first');
+
+// Empty transcript
+const emptyParsed = parseTranscript({ transcript: [] });
+assertEqual(emptyParsed.segments.length, 0, 'Transcript parse: empty transcript → 0 segments');
+
+// Missing fields
+const minimalParsed = parseTranscript({ transcript: [{ start: 0, end: 1, text: "Hi" }] });
+assertEqual(minimalParsed.video, null, 'Transcript parse: missing video → null');
+assertEqual(minimalParsed.duration, null, 'Transcript parse: missing duration → null');
+assertEqual(minimalParsed.speakers.length, 0, 'Transcript parse: missing speakers → empty');
+
 // ============================================
 // Summary
 // ============================================
