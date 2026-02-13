@@ -51,7 +51,7 @@
                     <button id="add-modality-btn" class="btn btn-secondary">
                         <span>➕</span> Add Data
                     </button>
-                    <input type="file" id="add-modality-input" accept="video/*,.mp4,.mov,.avi,.webm,.csv,.tsv,.txt,.jsonl,.gz" hidden multiple>
+                    <input type="file" id="add-modality-input" accept="video/*,.mp4,.mov,.avi,.webm,.csv,.tsv,.txt,.jsonl,.gz,.json" hidden multiple>
                 </div>
 
                 <!-- Video Controls -->
@@ -94,6 +94,17 @@
 
             <!-- Resize Handle -->
             <div id="panel-resizer" class="panel-resizer"></div>
+
+            <!-- Transcript Panel (hidden until transcript loaded) -->
+            <aside id="transcript-panel" class="transcript-panel" style="display: none;">
+                <div class="transcript-header">
+                    <h3>📝 Transcript</h3>
+                    <button id="transcript-close-btn" class="btn btn-icon btn-small" title="Close transcript" onclick="closeTranscriptPanel()">✕</button>
+                </div>
+                <div id="transcript-body" class="transcript-body">
+                    <!-- Dynamically generated transcript segments -->
+                </div>
+            </aside>
 
             <!-- Annotation Panel -->
             <aside class="annotation-panel">

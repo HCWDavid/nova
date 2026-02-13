@@ -27,6 +27,9 @@
  * - [x] add fixation processing instead of raw data
  * - [x] add temporal sync for gaze data
  * 
+ * 02/13/2026 (2):
+ * - [x] add transcript
+ * 
  * 
  * Question: 
  * - why dont u use this app or feature that are lacking? 
@@ -134,6 +137,9 @@ const state = {
         showFixations: true,
         fixationSizeMode: 'proportional', // 'fixed' | 'proportional'
     },
+    
+    // Transcript
+    transcript: null,
 };
 
 // ============================================
@@ -510,6 +516,27 @@ function handleAddDataFile(file) {
     
     if (videos.length === 0) {
         showNotification('Please add a video first, then add overlay data.');
+        return;
+    }
+    
+    // Check if this is a transcript JSON
+    if (file.name.endsWith('.json')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.transcript && Array.isArray(data.transcript)) {
+                    loadTranscript(data);
+                    return;
+                }
+            } catch (err) {
+                console.log('Not a transcript JSON, treating as data:', err);
+            }
+            // Not a transcript — fall through to data type picker
+            pendingDataFile = { file, videos };
+            showDataTypePicker(file.name);
+        };
+        reader.readAsText(file);
         return;
     }
     
@@ -1110,6 +1137,103 @@ function autoAlignGazeTimestamps(overlay, parentVideo) {
 
 
 
+// ============================================
+// Transcript Module
+// ============================================
+
+function loadTranscript(data) {
+    state.transcript = {
+        video: data.video || null,
+        duration: data.duration_s || null,
+        speakers: data.speakers || [],
+        segments: data.transcript || []
+    };
+    
+    console.log(`Loaded transcript: ${state.transcript.segments.length} segments`);
+    renderTranscript();
+}
+
+function renderTranscript() {
+    const panel = document.getElementById('transcript-panel');
+    const body = document.getElementById('transcript-body');
+    if (!panel || !body || !state.transcript) return;
+    
+    panel.style.display = 'flex';
+    
+    body.innerHTML = state.transcript.segments.map((seg, i) => {
+        const startTime = formatTimestamp(seg.start);
+        const endTime = formatTimestamp(seg.end);
+        const speaker = seg.speaker ? `<div class="transcript-segment-speaker">${seg.speaker}</div>` : '';
+        
+        return `
+            <div class="transcript-segment" 
+                 data-index="${i}" 
+                 data-start="${seg.start}" 
+                 data-end="${seg.end}"
+                 onclick="seekToTranscriptSegment(${seg.start})">
+                ${speaker}
+                <div class="transcript-segment-time">${startTime} → ${endTime}</div>
+                <div class="transcript-segment-text">${seg.text}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function formatTimestamp(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function seekToTranscriptSegment(startSec) {
+    const masterVideo = state.modalities.find(m => m.id === state.masterModalityId);
+    if (!masterVideo) return;
+    
+    const videoEl = document.getElementById('video-' + masterVideo.id);
+    if (videoEl) {
+        videoEl.currentTime = startSec;
+    }
+}
+
+function updateTranscriptHighlight() {
+    if (!state.transcript || !state.transcript.segments.length) return;
+    
+    const currentTimeSec = state.currentTime / 1000;
+    const body = document.getElementById('transcript-body');
+    if (!body) return;
+    
+    const segments = body.querySelectorAll('.transcript-segment');
+    let activeSegment = null;
+    
+    segments.forEach(seg => {
+        const start = parseFloat(seg.dataset.start);
+        const end = parseFloat(seg.dataset.end);
+        
+        if (currentTimeSec >= start && currentTimeSec <= end) {
+            seg.classList.add('active');
+            activeSegment = seg;
+        } else {
+            seg.classList.remove('active');
+        }
+    });
+    
+    // Auto-scroll to active segment
+    if (activeSegment) {
+        const bodyRect = body.getBoundingClientRect();
+        const segRect = activeSegment.getBoundingClientRect();
+        
+        if (segRect.top < bodyRect.top || segRect.bottom > bodyRect.bottom) {
+            activeSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+}
+
+function closeTranscriptPanel() {
+    const panel = document.getElementById('transcript-panel');
+    if (panel) panel.style.display = 'none';
+    state.transcript = null;
+}
+
 function adjustGazeOffset(deltaMs) {
     const gazeOverlays = state.modalities.filter(m => m.type === 'overlay-gaze' && m.data);
     gazeOverlays.forEach(o => {
@@ -1449,6 +1573,9 @@ function handleMasterTimeUpdate() {
     
     // Render IMU charts
     state.modalities.filter(m => m.type === 'timeseries-imu').forEach(renderIMUChart);
+    
+    // Update transcript highlight
+    updateTranscriptHighlight();
 }
 
 function renderOverlays() {
