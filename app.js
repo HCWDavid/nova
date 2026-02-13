@@ -413,13 +413,6 @@ function setupAnnotationsResizer() {
     let startY = 0;
     let startHeight = 0;
     
-    // Load saved height
-    const savedHeight = localStorage.getItem('nova_annotations_height');
-    if (savedHeight) {
-        listContainer.style.height = savedHeight + 'px';
-        listContainer.style.flex = 'none';
-    }
-    
     resizer.addEventListener('mousedown', (e) => {
         // Only allow resize when in resize mode
         if (!document.body.classList.contains('resize-mode')) return;
@@ -437,7 +430,7 @@ function setupAnnotationsResizer() {
         if (!isResizing) return;
         
         const diff = startY - e.clientY;
-        const newHeight = Math.min(400, Math.max(100, startHeight + diff));
+        const newHeight = Math.min(800, Math.max(200, startHeight + diff));
         listContainer.style.height = newHeight + 'px';
         listContainer.style.flex = 'none';
     });
@@ -1972,6 +1965,7 @@ function renderTabs() {
             renderTabs();
             renderAnnotationTypes();
             updateAnnotationControls();
+            renderAnnotationsList();
         });
         container.appendChild(tab);
     });
@@ -2232,12 +2226,13 @@ function renderAnnotationsList() {
     container.innerHTML = '';
     
     const allAnnotations = [];
-    state.layers.forEach(layer => {
-        (state.annotations[layer.id] || []).forEach(ann => {
-            const type = layer.types.find(t => t.id === ann.typeId);
-            allAnnotations.push({ ...ann, layerId: layer.id, color: type?.color || layer.color });
+    const activeLayer = state.layers.find(l => l.id === state.activeLayerId);
+    if (activeLayer) {
+        (state.annotations[activeLayer.id] || []).forEach(ann => {
+            const type = activeLayer.types.find(t => t.id === ann.typeId);
+            allAnnotations.push({ ...ann, layerId: activeLayer.id, color: type?.color || activeLayer.color });
         });
-    });
+    }
     allAnnotations.sort((a, b) => a.startTime - b.startTime);
     
     if (countEl) countEl.textContent = `(${allAnnotations.length})`;
