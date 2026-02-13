@@ -1695,3 +1695,141 @@ body.resize-mode .resize-mode-overlay {
     font-size: 0.8rem;
     margin-top: var(--spacing-xs);
 }
+
+/* Gaze Processing Settings */
+.gaze-config-section {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+}
+
+.gaze-config-section h3 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.gaze-param-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.gaze-param-row label {
+    min-width: 140px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.gaze-param-row label input[type="checkbox"] {
+    margin-right: var(--spacing-xs);
+}
+
+.gaze-select, .gaze-input {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+.gaze-input {
+    width: 80px;
+    text-align: center;
+}
+
+.gaze-select:focus, .gaze-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.gaze-unit {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.gaze-stats {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.gaze-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-xs) var(--spacing-md);
+}
+
+.gaze-stats-grid .stat-label {
+    color: var(--text-muted);
+}
+
+.gaze-stats-grid .stat-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.gaze-offset-value {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    min-width: 80px;
+}
+
+.gaze-sync-buttons {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.gaze-sync-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.gaze-sync-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+}
+
+.gaze-sync-reset {
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+.gaze-sync-row {
+    align-items: center;
+}
+
+.gaze-offset-value {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 1rem;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    transition: background 0.15s;
+}
+
+.btn-sm:hover {
+    background: var(--bg-elevated);
+    border-color: var(--primary);
+}

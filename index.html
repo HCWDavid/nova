@@ -207,6 +207,7 @@
                     <button class="settings-tab active" data-tab="layers">Layers</button>
                     <button class="settings-tab" data-tab="modalities">Modalities</button>
                     <button class="settings-tab" data-tab="pinmode">Pin Mode</button>
+                    <button class="settings-tab" data-tab="gaze">Gaze</button>
                     <button class="settings-tab" data-tab="layout">Layout</button>
                 </div>
                 
@@ -245,6 +246,118 @@
                                 </select>
                             </div>
                             <p class="settings-hint">Annotation will span from current frame ± this window.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Gaze Processing Settings Pane -->
+                    <div id="gaze-settings" class="settings-pane" style="display: none;">
+                        <p class="settings-intro">Configure gaze data post-processing: smoothing and fixation detection.</p>
+                        
+                        <!-- Temporal Sync -->
+                        <div class="gaze-config-section">
+                            <h3>Temporal Sync</h3>
+                            <p class="settings-hint">Auto-aligned on load. Fine-tune manually if needed.</p>
+                            <div class="gaze-param-row gaze-sync-row">
+                                <label>Offset:</label>
+                                <span id="gaze-offset-display" class="gaze-offset-value">0 ms</span>
+                            </div>
+                            <div class="gaze-sync-buttons">
+                                <button class="gaze-sync-btn" onclick="adjustGazeOffset(-100)">−100ms</button>
+                                <button class="gaze-sync-btn" onclick="adjustGazeOffset(-10)">−10ms</button>
+                                <button class="gaze-sync-btn gaze-sync-reset" onclick="adjustGazeOffset(-state.modalities.find(m=>m.type==='overlay-gaze')?.offsetMs||0)">Reset</button>
+                                <button class="gaze-sync-btn" onclick="adjustGazeOffset(10)">+10ms</button>
+                                <button class="gaze-sync-btn" onclick="adjustGazeOffset(100)">+100ms</button>
+                            </div>
+                        </div>
+
+                        <!-- Smoothing Filter -->
+                        <div class="gaze-config-section">
+                            <h3>Smoothing Filter</h3>
+                            <div class="gaze-param-row">
+                                <label>Filter Type:</label>
+                                <select id="gaze-filter-type" class="gaze-select" onchange="updateGazeConfig('filter', this.value)">
+                                    <option value="none">None</option>
+                                    <option value="moving-average" selected>Moving Average</option>
+                                    <option value="median">Median</option>
+                                </select>
+                            </div>
+                            <div class="gaze-param-row">
+                                <label>Window Size:</label>
+                                <input type="number" id="gaze-filter-window" class="gaze-input" value="5" min="1" max="30" step="1"
+                                       onchange="updateGazeConfig('filterWindow', parseInt(this.value))">
+                                <span class="gaze-unit">samples</span>
+                            </div>
+                        </div>
+
+                        <!-- Fixation Detection -->
+                        <div class="gaze-config-section">
+                            <h3>Fixation Detection</h3>
+                            <div class="gaze-param-row">
+                                <label>Algorithm:</label>
+                                <select id="gaze-fixation-algo" class="gaze-select" onchange="updateGazeConfig('fixationAlgo', this.value)">
+                                    <option value="none">None (Raw Gaze Only)</option>
+                                    <option value="ivt" selected>I-VT (Velocity Threshold)</option>
+                                    <option value="idt">I-DT (Dispersion Threshold)</option>
+                                </select>
+                            </div>
+                            
+                            <!-- I-VT Parameters -->
+                            <div id="ivt-params" class="gaze-algo-params">
+                                <div class="gaze-param-row">
+                                    <label>Velocity Threshold:</label>
+                                    <input type="number" id="gaze-ivt-threshold" class="gaze-input" value="0.5" min="0.01" max="5" step="0.05"
+                                           onchange="updateGazeConfig('ivtThreshold', parseFloat(this.value))">
+                                    <span class="gaze-unit">norm/s</span>
+                                </div>
+                            </div>
+
+                            <!-- I-DT Parameters -->
+                            <div id="idt-params" class="gaze-algo-params" style="display: none;">
+                                <div class="gaze-param-row">
+                                    <label>Dispersion Threshold:</label>
+                                    <input type="number" id="gaze-idt-dispersion" class="gaze-input" value="0.03" min="0.005" max="0.2" step="0.005"
+                                           onchange="updateGazeConfig('idtDispersion', parseFloat(this.value))">
+                                    <span class="gaze-unit">normalized</span>
+                                </div>
+                                <div class="gaze-param-row">
+                                    <label>Min Duration:</label>
+                                    <input type="number" id="gaze-idt-min-duration" class="gaze-input" value="100" min="10" max="1000" step="10"
+                                           onchange="updateGazeConfig('idtMinDuration', parseInt(this.value))">
+                                    <span class="gaze-unit">ms</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Display Options -->
+                        <div class="gaze-config-section">
+                            <h3>Display</h3>
+                            <div class="gaze-param-row">
+                                <label>
+                                    <input type="checkbox" id="gaze-show-raw" onchange="updateGazeConfig('showRawGaze', this.checked)">
+                                    Show raw/filtered gaze trail
+                                </label>
+                            </div>
+                            <div class="gaze-param-row">
+                                <label>
+                                    <input type="checkbox" id="gaze-show-fixations" checked onchange="updateGazeConfig('showFixations', this.checked)">
+                                    Show fixation circles
+                                </label>
+                            </div>
+                            <div class="gaze-param-row">
+                                <label>Fixation Size:</label>
+                                <select id="gaze-fixation-size-mode" class="gaze-select" onchange="updateGazeConfig('fixationSizeMode', this.value)">
+                                    <option value="proportional" selected>Proportional to Duration</option>
+                                    <option value="fixed">Fixed Size</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Stats -->
+                        <div class="gaze-config-section">
+                            <h3>Gaze Stats</h3>
+                            <div id="gaze-stats" class="gaze-stats">
+                                <p class="settings-hint">Load gaze data to see statistics.</p>
+                            </div>
                         </div>
                     </div>
                     

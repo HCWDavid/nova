@@ -71,22 +71,22 @@ Actions represent **discrete, observable physical behaviors** performed by the n
 
 | ID | Label | Color | Definition | Mode |
 |----|-------|-------|------------|------|
-| 1 | **Perform hand hygiene (sanitizer)** | `#a29bfe` | Nurse uses hand sanitizer or washes hands at a sink. Starts when hands reach for sanitizer/soap; ends when rubbing stops. | Range |
-| 2 | **Put on gloves** | `#fd79a8` | Nurse retrieves and puts on disposable gloves. Starts at reaching for gloves; ends when both gloves are fully on. | Range |
-| 3 | **Check patient's wristband** | `#e17055` | Nurse visually inspects or scans the patient's wristband for identity verification. | Range/Pin |
+| 1 | **Perform Hand Hygiene** | `#a29bfe` | Nurse uses hand sanitizer or washes hands at a sink. Starts when hands reach for sanitizer/soap; ends when rubbing stops. | Range |
+| 2 | **Put on Gloves** | `#fd79a8` | Nurse retrieves and puts on disposable gloves. Starts at reaching for gloves; ends when both gloves are fully on. | Range |
+| 3 | **Check Patient Wristband** | `#e17055` | Nurse visually inspects or scans the patient's wristband for identity verification. | Range/Pin |
 | 4 | **Check Patient History Screen** | `#00cec9` | Nurse looks at and interacts with the electronic health record or patient history on a computer/tablet screen. Distinguished from vital signs screen by content (history, orders, notes vs. real-time vitals). | Range |
 | 5 | **Examine Med Bottle** | `#6c5ce7` | Nurse picks up, reads, and/or inspects a medication bottle or package label. Includes the "three checks" of medication label verification. | Range |
-| 6 | **Review vital signs screen** | `#fdcb6e` | Nurse looks at the vital signs monitor screen displaying current or recent measurements (HR, BP, SpO2, etc.). | Range |
-| 7 | **Assess vital signs (touch patient's wrist)** | `#e84393` | Nurse manually palpates the patient's radial pulse by touching the wrist. Starts when fingers contact the wrist; ends when hand is removed. | Range |
+| 6 | **Review Vital Signs Screen** | `#fdcb6e` | Nurse looks at the vital signs monitor screen displaying current or recent measurements (HR, BP, SpO2, etc.). | Range |
+| 7 | **Assess Vital Signs (Palpate Wrist)** | `#e84393` | Nurse manually palpates the patient's radial pulse by touching the wrist. Starts when fingers contact the wrist; ends when hand is removed. | Range |
 | 8 | **Auscultate Lung Sounds** | `#0984e3` | Nurse places stethoscope on the patient's **chest or back** to listen to lung/breath sounds. The stethoscope is positioned on the thorax (anterior, posterior, or lateral). | Range |
 | 9 | **Measure Apical Pulse** | `#2d98da` | Nurse places stethoscope on the patient's **left chest (apex of heart)** to auscultate the heartbeat and count the apical pulse. Typically held in one position for 30–60 seconds. | Range |
-| 10 | **Measure temperature** | `#d63031` | Nurse uses a thermometer (oral, tympanic, temporal, etc.) to take the patient's temperature. | Range/Pin |
-| 11 | **Measure blood pressure** | `#55a3ff` | Nurse initiates a blood pressure reading, either by pressing a button on the vital signs monitor or manually with a cuff. | Range/Pin |
+| 10 | **Measure Temperature** | `#d63031` | Nurse uses a thermometer (oral, tympanic, temporal, etc.) to take the patient's temperature. | Range/Pin |
+| 11 | **Measure Blood Pressure** | `#55a3ff` | Nurse initiates a blood pressure reading, either by pressing a button on the vital signs monitor or manually with a cuff. | Range/Pin |
 | 12 | **Writing** | `#81ecec` | Nurse writes or documents on paper (not a screen). Includes any pen-to-paper activity: notes, calculations on paper, filling out forms. | Range |
 | 13 | **Use Calculator** | `#fab1a0` | Nurse uses any calculator to compute medication dosage or other values. Includes both physical desk calculators and the calculator app on a phone. | Range |
 | 14 | **Check Phone** | `#ffeaa7` | Nurse looks at or interacts with a mobile phone for **non-calculator purposes** (e.g., checking notifications, reading messages, looking something up). | Range/Pin |
-| 15 | **Prepare medication** | `#74b9ff` | Nurse prepares the medication for administration: drawing up liquid in a syringe, crushing a tablet, mixing a solution, or opening packaging. | Range |
-| 16 | **Apply medication to patient** | `#a29bfe` | Nurse directly administers the prepared medication to the patient: oral delivery, injection, IV push, topical application, etc. | Range |
+| 15 | **Prepare Medication** | `#74b9ff` | Nurse prepares the medication for administration: drawing up liquid in a syringe, crushing a tablet, mixing a solution, or opening packaging. | Range |
+| 16 | **Apply Medication to Patient** | `#a29bfe` | Nurse directly administers the prepared medication to the patient: oral delivery, injection, IV push, topical application, etc. | Range |
 
 > [!NOTE]
 > **Verbal introductions** (e.g., "Hi, I'm Nurse Smith") are not coded as an Action. They are captured by the **Behavior layer** (Introduction/Identification) and the **Communication layer** (Patient or Family).

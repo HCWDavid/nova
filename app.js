@@ -15,10 +15,17 @@
  * - scoping into two minuates from 15 mins
  * - change layers => tracks
  * - mechanism: refresh page prevention while its not 'exported' 
- * - having only 'start-end' button for 1 frame instead of two buttons (like a button call "mark this frame" or something)
- * 
+ * - when export, make sure to have the option of including video name to the exported file.
+ * - input an input field for the time unit consistent throughout the session
+ * - use this time unit to range in or range out the video range for more focused analysis. 
  * FIXED:
+ * 02/10/2026
  * - [x] adding a new layer didn't work with the new layer annotation (v0.2.1 - initialized annotations array for new layers)
+ * - [x] having only 'start-end' button for 1 frame instead of two buttons (like a button call "mark this frame" or something)
+ * 02/13/2026
+ * - [x] gaze potentially wrong with resizing browser or h*w
+ * - [x] add fixation processing instead of raw data
+ * - [x] add temporal sync for gaze data
  * 
  * 
  * Question: 
@@ -44,22 +51,22 @@ let DEFAULT_LAYERS = [
         { id: 3, name: 'Med Administration', color: '#45B7D1' },
     ]},
     { id: 'action', name: 'Actions', shortcut: 'a', color: '#74b9ff', types: [
-        { id: 1, name: 'Perform hand hygiene (sanitizer)', color: '#a29bfe' },
-        { id: 2, name: 'Put on gloves', color: '#fd79a8' },
-        { id: 3, name: 'Check patient\'s wristband', color: '#e17055' },
+        { id: 1, name: 'Perform Hand Hygiene', color: '#a29bfe' },
+        { id: 2, name: 'Put on Gloves', color: '#fd79a8' },
+        { id: 3, name: 'Check Patient Wristband', color: '#e17055' },
         { id: 4, name: 'Check Patient History Screen', color: '#00cec9' },
         { id: 5, name: 'Examine Med Bottle', color: '#6c5ce7' },
-        { id: 6, name: 'Review vital signs screen', color: '#fdcb6e' },
-        { id: 7, name: 'Assess vital signs (touch patient\'s wrist)', color: '#e84393' },
+        { id: 6, name: 'Review Vital Signs Screen', color: '#fdcb6e' },
+        { id: 7, name: 'Assess Vital Signs (Palpate Wrist)', color: '#e84393' },
         { id: 8, name: 'Auscultate Lung Sounds', color: '#0984e3' },
         { id: 9, name: 'Measure Apical Pulse', color: '#2d98da' },
-        { id: 10, name: 'Measure temperature', color: '#d63031' },
-        { id: 11, name: 'Measure blood pressure', color: '#55a3ff' },
+        { id: 10, name: 'Measure Temperature', color: '#d63031' },
+        { id: 11, name: 'Measure Blood Pressure', color: '#55a3ff' },
         { id: 12, name: 'Writing', color: '#81ecec' },
         { id: 13, name: 'Use Calculator', color: '#fab1a0' },
         { id: 14, name: 'Check Phone', color: '#ffeaa7' },
-        { id: 15, name: 'Prepare medication', color: '#74b9ff' },
-        { id: 16, name: 'Apply medication to patient', color: '#a29bfe' },
+        { id: 15, name: 'Prepare Medication', color: '#74b9ff' },
+        { id: 16, name: 'Apply Medication to Patient', color: '#a29bfe' },
     ]},
     { id: 'comm', name: 'Communication', shortcut: 'c', color: '#4285F4', types: [
         { id: 1, name: 'Patient', color: '#4285F4' },
@@ -114,6 +121,19 @@ const state = {
     annotationMode: 'range', // 'range' | 'pin'
     pinWindowValue: 1,
     pinWindowUnit: 'frames', // 'frames' | 'seconds' | 'ms'
+    
+    // Gaze Processing
+    gazeConfig: {
+        filter: 'moving-average',   // 'none' | 'moving-average' | 'median'
+        filterWindow: 5,
+        fixationAlgo: 'ivt',        // 'none' | 'idt' | 'ivt'
+        idtDispersion: 0.03,        // normalized units
+        idtMinDuration: 100,        // ms
+        ivtThreshold: 0.5,          // normalized units per second
+        showRawGaze: false,
+        showFixations: true,
+        fixationSizeMode: 'proportional', // 'fixed' | 'proportional'
+    },
 };
 
 // ============================================
@@ -278,7 +298,12 @@ function setupEventListeners() {
     
     // Keyboard
     document.addEventListener('keydown', handleKeyPress);
-    window.addEventListener('resize', () => requestAnimationFrame(renderTimelines));
+    window.addEventListener('resize', () => {
+        requestAnimationFrame(() => {
+            renderTimelines();
+            renderOverlays();
+        });
+    });
     
     // Pin Mode
     document.getElementById('annotation-mode-select')?.addEventListener('change', handleAnnotationModeChange);
@@ -346,8 +371,11 @@ function setupPanelResizer() {
             // Save width
             localStorage.setItem('nova_panel_width', panel.offsetWidth);
             
-            // Redraw timelines
-            requestAnimationFrame(renderTimelines);
+            // Redraw timelines and overlays (gaze dot position depends on video display size)
+            requestAnimationFrame(() => {
+                renderTimelines();
+                renderOverlays();
+            });
         }
     });
     
@@ -721,6 +749,16 @@ function addOverlayModality(type, parentVideoId, file) {
         // Use smart parser based on type
         if (type === 'overlay-gaze' || type === 'overlay-heatmap') {
             modality.data = parseGazeData(text, modality);
+            
+            // Auto-sync: align timestamps heuristically
+            const parent = state.modalities.find(m => m.id === parentVideoId);
+            if (parent) {
+                autoAlignGazeTimestamps(modality, parent);
+            }
+            
+            processGazeData(modality);
+            
+
         } else if (type === 'timeseries-imu') {
             modality.data = parseIMUData(text, modality);
         } else {
@@ -810,6 +848,280 @@ function parseGazeData(text, modality) {
     
     console.log(`Parsed ${data.length} CSV gaze points`);
     return data;
+}
+
+// ============================================
+// Gaze Processing Pipeline
+// ============================================
+
+function applyGazeFilter(rawData, config) {
+    if (config.filter === 'none' || !rawData || rawData.length === 0) {
+        return rawData.map(p => ({ ...p }));
+    }
+    
+    const window = Math.max(1, config.filterWindow);
+    const half = Math.floor(window / 2);
+    const result = [];
+    
+    for (let i = 0; i < rawData.length; i++) {
+        const start = Math.max(0, i - half);
+        const end = Math.min(rawData.length - 1, i + half);
+        const windowPoints = rawData.slice(start, end + 1);
+        
+        let x, y;
+        if (config.filter === 'moving-average') {
+            x = windowPoints.reduce((sum, p) => sum + p.x, 0) / windowPoints.length;
+            y = windowPoints.reduce((sum, p) => sum + p.y, 0) / windowPoints.length;
+        } else if (config.filter === 'median') {
+            const sortedX = windowPoints.map(p => p.x).sort((a, b) => a - b);
+            const sortedY = windowPoints.map(p => p.y).sort((a, b) => a - b);
+            const mid = Math.floor(sortedX.length / 2);
+            x = sortedX.length % 2 ? sortedX[mid] : (sortedX[mid - 1] + sortedX[mid]) / 2;
+            y = sortedY.length % 2 ? sortedY[mid] : (sortedY[mid - 1] + sortedY[mid]) / 2;
+        }
+        
+        result.push({ ...rawData[i], x, y });
+    }
+    
+    return result;
+}
+
+function detectFixationsIVT(filteredData, config) {
+    if (!filteredData || filteredData.length < 2) return [];
+    
+    const threshold = config.ivtThreshold;
+    const fixations = [];
+    let currentFixationPoints = [];
+    
+    for (let i = 0; i < filteredData.length; i++) {
+        let velocity = 0;
+        if (i > 0) {
+            const dt = filteredData[i].timestamp - filteredData[i - 1].timestamp;
+            if (dt > 0) {
+                const dx = filteredData[i].x - filteredData[i - 1].x;
+                const dy = filteredData[i].y - filteredData[i - 1].y;
+                velocity = Math.sqrt(dx * dx + dy * dy) / dt;
+            }
+        }
+        
+        if (velocity <= threshold) {
+            // Fixation point
+            currentFixationPoints.push(filteredData[i]);
+        } else {
+            // Saccade — finalize current fixation if any
+            if (currentFixationPoints.length >= 2) {
+                fixations.push(createFixation(currentFixationPoints));
+            }
+            currentFixationPoints = [];
+        }
+    }
+    
+    // Finalize last fixation
+    if (currentFixationPoints.length >= 2) {
+        fixations.push(createFixation(currentFixationPoints));
+    }
+    
+    return fixations;
+}
+
+function detectFixationsIDT(filteredData, config) {
+    if (!filteredData || filteredData.length < 2) return [];
+    
+    const dispThreshold = config.idtDispersion;
+    const minDurationSec = config.idtMinDuration / 1000;
+    const fixations = [];
+    
+    let i = 0;
+    while (i < filteredData.length) {
+        // Start a new potential fixation window
+        let windowEnd = i;
+        
+        // Expand window while dispersion is below threshold
+        while (windowEnd < filteredData.length) {
+            const windowPoints = filteredData.slice(i, windowEnd + 1);
+            const xs = windowPoints.map(p => p.x);
+            const ys = windowPoints.map(p => p.y);
+            const dispersion = (Math.max(...xs) - Math.min(...xs)) + (Math.max(...ys) - Math.min(...ys));
+            
+            if (dispersion > dispThreshold) {
+                break;
+            }
+            windowEnd++;
+        }
+        
+        // Check if fixation meets minimum duration
+        const fixationPoints = filteredData.slice(i, windowEnd);
+        if (fixationPoints.length >= 2) {
+            const duration = fixationPoints[fixationPoints.length - 1].timestamp - fixationPoints[0].timestamp;
+            if (duration >= minDurationSec) {
+                fixations.push(createFixation(fixationPoints));
+                i = windowEnd;
+                continue;
+            }
+        }
+        
+        i++;
+    }
+    
+    return fixations;
+}
+
+function createFixation(points) {
+    const x = points.reduce((s, p) => s + p.x, 0) / points.length;
+    const y = points.reduce((s, p) => s + p.y, 0) / points.length;
+    const startTime = points[0].timestamp;
+    const endTime = points[points.length - 1].timestamp;
+    return {
+        x, y,
+        startTime,
+        endTime,
+        duration: endTime - startTime,
+        pointCount: points.length,
+    };
+}
+
+function processGazeData(overlay) {
+    if (!overlay.data || overlay.data.length === 0) return;
+    
+    const config = state.gazeConfig;
+    
+    // Step 1: Apply smoothing filter
+    overlay.processedData = applyGazeFilter(overlay.data, config);
+    
+    // Step 2: Detect fixations
+    if (config.fixationAlgo === 'ivt') {
+        overlay.fixations = detectFixationsIVT(overlay.processedData, config);
+    } else if (config.fixationAlgo === 'idt') {
+        overlay.fixations = detectFixationsIDT(overlay.processedData, config);
+    } else {
+        overlay.fixations = [];
+    }
+    
+    console.log(`Processed gaze: ${overlay.processedData.length} points → ${overlay.fixations.length} fixations`);
+}
+
+function processAllGazeOverlays() {
+    state.modalities
+        .filter(m => m.type === 'overlay-gaze' && m.data && m.data.length > 0)
+        .forEach(overlay => processGazeData(overlay));
+    
+    updateGazeStats();
+    renderOverlays();
+}
+
+function updateGazeConfig(key, value) {
+    state.gazeConfig[key] = value;
+    
+    // Show/hide algorithm-specific params
+    const ivtParams = document.getElementById('ivt-params');
+    const idtParams = document.getElementById('idt-params');
+    if (key === 'fixationAlgo') {
+        if (ivtParams) ivtParams.style.display = value === 'ivt' ? 'block' : 'none';
+        if (idtParams) idtParams.style.display = value === 'idt' ? 'block' : 'none';
+    }
+    
+    // Reprocess all gaze data
+    processAllGazeOverlays();
+}
+
+function updateGazeStats() {
+    const statsEl = document.getElementById('gaze-stats');
+    if (!statsEl) return;
+    
+    const gazeOverlays = state.modalities.filter(m => m.type === 'overlay-gaze' && m.data);
+    if (gazeOverlays.length === 0) {
+        statsEl.innerHTML = '<p class="settings-hint">Load gaze data to see statistics.</p>';
+        return;
+    }
+    
+    let totalRaw = 0, totalFixations = 0, totalDuration = 0;
+    gazeOverlays.forEach(o => {
+        totalRaw += (o.data || []).length;
+        totalFixations += (o.fixations || []).length;
+        (o.fixations || []).forEach(f => totalDuration += f.duration);
+    });
+    
+    const avgDuration = totalFixations > 0 ? (totalDuration / totalFixations * 1000).toFixed(0) : '—';
+    
+    statsEl.innerHTML = `
+        <div class="gaze-stats-grid">
+            <span class="stat-label">Raw samples:</span>
+            <span class="stat-value">${totalRaw.toLocaleString()}</span>
+            <span class="stat-label">Fixations detected:</span>
+            <span class="stat-value">${totalFixations}</span>
+            <span class="stat-label">Avg fixation duration:</span>
+            <span class="stat-value">${avgDuration} ms</span>
+        </div>
+    `;
+}
+
+// ============================================
+// Auto Gaze-Video Temporal Sync
+// ============================================
+
+function autoAlignGazeTimestamps(overlay, parentVideo) {
+    if (!overlay.data || overlay.data.length < 2) return;
+    
+    const gazeStart = overlay.data[0].timestamp;
+    const gazeEnd = overlay.data[overlay.data.length - 1].timestamp;
+    const gazeDuration = gazeEnd - gazeStart;
+    
+    // Get video duration in the same unit as gaze timestamps
+    const videoEl = document.getElementById('video-' + parentVideo.id);
+    const videoDurationSec = videoEl ? videoEl.duration : (state.duration / 1000);
+    
+    // Convert gaze times to seconds for comparison
+    const gazeStartSec = overlay.timestampUnit === 's' ? gazeStart : gazeStart / 1000;
+    const gazeDurationSec = overlay.timestampUnit === 's' ? gazeDuration : gazeDuration / 1000;
+    
+    let offsetMs = 0;
+    let reason = '';
+    
+    // Tier 1: Detect Unix epoch timestamps (gaze timestamps > 1e9 seconds or > 1e12 ms)
+    if (gazeStartSec > 1e9) {
+        // Unix epoch — subtract start time to make relative
+        const startOffset = overlay.timestampUnit === 's' ? gazeStart : gazeStart / 1000;
+        offsetMs = -startOffset * 1000;
+        reason = `Unix epoch detected (start: ${gazeStartSec.toFixed(0)}s), rebaselined to 0`;
+    }
+    // Tier 2: If gaze starts significantly after video start, align first gaze point to t=0
+    else if (gazeStartSec > 1 && Math.abs(gazeDurationSec - videoDurationSec) / videoDurationSec < 0.3) {
+        // Gaze duration is similar to video duration but starts offset
+        offsetMs = -(overlay.timestampUnit === 's' ? gazeStart * 1000 : gazeStart);
+        reason = `Gaze starts at ${gazeStartSec.toFixed(2)}s, shifting to align with video start`;
+    }
+    // Tier 3: Tobii scene camera — typically both start at 0, minimal offset expected
+    else if (gazeStartSec >= 0 && gazeStartSec < 1) {
+        // Small offset, might be recording startup delay
+        offsetMs = -(overlay.timestampUnit === 's' ? gazeStart * 1000 : gazeStart);
+        if (Math.abs(offsetMs) < 10) offsetMs = 0; // ignore < 10ms
+        reason = offsetMs !== 0 ? `Small startup offset: ${offsetMs.toFixed(0)}ms` : 'Already aligned';
+    }
+    
+    if (offsetMs !== 0) {
+        overlay.offsetMs = offsetMs;
+        console.log(`Auto-sync: ${reason} → offset = ${offsetMs.toFixed(0)}ms`);
+    } else {
+        console.log(`Auto-sync: ${reason || 'No adjustment needed'}`);
+    }
+    
+    return { offsetMs, reason };
+}
+
+
+
+function adjustGazeOffset(deltaMs) {
+    const gazeOverlays = state.modalities.filter(m => m.type === 'overlay-gaze' && m.data);
+    gazeOverlays.forEach(o => {
+        o.offsetMs = (o.offsetMs || 0) + deltaMs;
+    });
+    processAllGazeOverlays();
+    
+    // Update the offset display in modalities settings
+    const offsetDisplay = document.getElementById('gaze-offset-display');
+    if (offsetDisplay && gazeOverlays.length > 0) {
+        offsetDisplay.textContent = `${gazeOverlays[0].offsetMs.toFixed(0)} ms`;
+    }
 }
 
 function parseCSV(text) {
@@ -1038,20 +1350,21 @@ function renderModalities() {
         canvas.className = 'overlay-canvas';
         videoContainer.appendChild(canvas);
         
-        // Size canvas immediately if video already loaded
+        // Size canvas to match display dimensions (not native resolution)
+        // renderOverlays() will keep this in sync on subsequent frames
+        const sizeCanvas = () => {
+            const rect = videoContainer.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+        };
         if (videoEl.videoWidth > 0) {
-            canvas.width = videoEl.videoWidth;
-            canvas.height = videoEl.videoHeight;
-            console.log(`Canvas immediately sized: ${canvas.width}x${canvas.height}`);
+            sizeCanvas();
         } else {
-            // Fallback: size to container after a short delay
-            setTimeout(() => {
-                if (canvas.width === 0 && videoContainer.clientWidth > 0) {
-                    canvas.width = videoContainer.clientWidth;
-                    canvas.height = videoContainer.clientHeight;
-                    console.log(`Canvas fallback sized: ${canvas.width}x${canvas.height}`);
-                }
-            }, 500);
+            videoEl.addEventListener('loadedmetadata', sizeCanvas, { once: true });
+            // Fallback for edge cases
+            setTimeout(sizeCanvas, 500);
         }
         
         // Overlay toggles
@@ -1237,40 +1550,20 @@ function renderIMUChart(imu) {
 
 function renderGazeOverlay(ctx, canvas, overlay, video) {
     if (!overlay.data || overlay.data.length === 0) {
-        console.log('No gaze data to render');
         return;
     }
     
     if (canvas.width === 0 || canvas.height === 0) {
-        console.log('Canvas has no size, skipping render');
         return;
     }
+    
+    const config = state.gazeConfig;
     
     // Video time in ms
     const videoTimeMs = state.currentTime + video.offsetMs + overlay.offsetMs;
     // Convert to seconds for Tobii data
     const videoTimeSec = overlay.timestampUnit === 's' ? videoTimeMs / 1000 : videoTimeMs;
-
     
-    // Binary search to find closest point (data is sorted by timestamp)
-    let closestIdx = 0;
-    let closestDiff = Infinity;
-    
-    for (let i = 0; i < overlay.data.length; i++) {
-        const point = overlay.data[i];
-        const timestamp = point.timestamp !== undefined ? point.timestamp : point[0];
-        
-        const diff = Math.abs(timestamp - videoTimeSec);
-        if (diff < closestDiff) {
-            closestDiff = diff;
-            closestIdx = i;
-        }
-        
-        // Early exit if we've passed the time
-        if (timestamp > videoTimeSec && diff > closestDiff) break;
-    }
-    
-    // Draw trail + current point
     // Calculate actual video display area (accounting for object-fit: contain)
     const videoEl = document.getElementById('video-' + video.id);
     let videoDisplayX = 0, videoDisplayY = 0, videoDisplayW = canvas.width, videoDisplayH = canvas.height;
@@ -1280,48 +1573,111 @@ function renderGazeOverlay(ctx, canvas, overlay, video) {
         const canvasAspect = canvas.width / canvas.height;
         
         if (videoAspect > canvasAspect) {
-            // Video is wider than canvas - letterbox top/bottom
             videoDisplayW = canvas.width;
             videoDisplayH = canvas.width / videoAspect;
             videoDisplayY = (canvas.height - videoDisplayH) / 2;
         } else {
-            // Video is taller than canvas - pillarbox left/right
             videoDisplayH = canvas.height;
             videoDisplayW = canvas.height * videoAspect;
             videoDisplayX = (canvas.width - videoDisplayW) / 2;
         }
     }
     
-    // DEBUG: Draw video area boundary (remove after verification)
-    ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(videoDisplayX, videoDisplayY, videoDisplayW, videoDisplayH);
+    // Use processed data (filtered) if available, otherwise raw
+    const gazeData = overlay.processedData || overlay.data;
     
-    for (let i = Math.max(0, closestIdx - overlay.trailLength); i <= closestIdx; i++) {
-        const point = overlay.data[i];
-        if (!point) continue;
-        
-        // Support both object format {x, y} and array format [ts, x, y]
-        let x = point.x !== undefined ? point.x : point[overlay.gazeXColumn || 1];
-        let y = point.y !== undefined ? point.y : point[overlay.gazeYColumn || 2];
-        
-        if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) continue;
-        
-        // Convert normalized coords to canvas pixels (within actual video display area)
-        if (overlay.coordinateSystem === 'normalized') {
-            x = videoDisplayX + (x * videoDisplayW);
-            y = videoDisplayY + (y * videoDisplayH);
+    // Binary search to find closest point
+    let closestIdx = 0;
+    let closestDiff = Infinity;
+    
+    for (let i = 0; i < gazeData.length; i++) {
+        const timestamp = gazeData[i].timestamp !== undefined ? gazeData[i].timestamp : gazeData[i][0];
+        const diff = Math.abs(timestamp - videoTimeSec);
+        if (diff < closestDiff) {
+            closestDiff = diff;
+            closestIdx = i;
         }
+        if (timestamp > videoTimeSec && diff > closestDiff) break;
+    }
+    
+    // Draw raw/filtered gaze trail
+    if (config.showRawGaze || config.fixationAlgo === 'none') {
+        for (let i = Math.max(0, closestIdx - overlay.trailLength); i <= closestIdx; i++) {
+            const point = gazeData[i];
+            if (!point) continue;
+            
+            let x = point.x !== undefined ? point.x : point[overlay.gazeXColumn || 1];
+            let y = point.y !== undefined ? point.y : point[overlay.gazeYColumn || 2];
+            
+            if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) continue;
+            
+            if (overlay.coordinateSystem === 'normalized') {
+                x = videoDisplayX + (x * videoDisplayW);
+                y = videoDisplayY + (y * videoDisplayH);
+            }
+            
+            const age = closestIdx - i;
+            const alpha = (overlay.trailLength - age) / overlay.trailLength;
+            const size = overlay.dotSize * alpha;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+            ctx.fillStyle = overlay.color;
+            ctx.globalAlpha = overlay.opacity * alpha;
+            ctx.fill();
+        }
+    }
+    
+    // Draw fixation circles
+    if (config.showFixations && overlay.fixations && overlay.fixations.length > 0) {
+        const fixations = overlay.fixations;
         
-        const age = closestIdx - i;
-        const alpha = (overlay.trailLength - age) / overlay.trailLength;
-        const size = overlay.dotSize * alpha;
-        
-        ctx.beginPath();
-        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
-        ctx.fillStyle = overlay.color;
-        ctx.globalAlpha = overlay.opacity * alpha;
-        ctx.fill();
+        for (const fix of fixations) {
+            // Only draw fixations near the current time
+            if (videoTimeSec < fix.startTime || videoTimeSec > fix.endTime + 0.5) continue;
+            
+            let x = fix.x, y = fix.y;
+            if (overlay.coordinateSystem === 'normalized') {
+                x = videoDisplayX + (x * videoDisplayW);
+                y = videoDisplayY + (y * videoDisplayH);
+            }
+            
+            // Size based on duration
+            let radius;
+            if (config.fixationSizeMode === 'proportional') {
+                radius = Math.max(10, Math.min(60, fix.duration * 100)); // 100ms → 10px, 600ms → 60px
+            } else {
+                radius = 20;
+            }
+            
+            // Fade: full opacity during fixation, fade out after
+            const isActive = videoTimeSec >= fix.startTime && videoTimeSec <= fix.endTime;
+            const fadeAlpha = isActive ? 1 : Math.max(0, 1 - (videoTimeSec - fix.endTime) * 2);
+            
+            // Draw fixation circle
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.strokeStyle = overlay.color || '#FF0000';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = overlay.opacity * fadeAlpha * 0.8;
+            ctx.stroke();
+            
+            // Fill with semi-transparent color
+            ctx.fillStyle = overlay.color || '#FF0000';
+            ctx.globalAlpha = overlay.opacity * fadeAlpha * 0.15;
+            ctx.fill();
+            
+            // Duration label (only for active fixations with enough space)
+            if (isActive && radius >= 15) {
+                const durationMs = Math.round(fix.duration * 1000);
+                ctx.font = `${Math.min(12, radius * 0.6)}px sans-serif`;
+                ctx.fillStyle = '#FFFFFF';
+                ctx.globalAlpha = overlay.opacity * fadeAlpha * 0.9;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`${durationMs}`, x, y);
+            }
+        }
     }
     
     ctx.globalAlpha = 1;
@@ -1787,19 +2143,22 @@ function renderSettings() {
     const layersPane = document.getElementById('layers-settings');
     const modalitiesPane = document.getElementById('modalities-settings');
     const pinmodePane = document.getElementById('pinmode-settings');
+    const gazePane = document.getElementById('gaze-settings');
     const layoutPane = document.getElementById('layout-settings');
     
     if (layersPane) layersPane.style.display = state.settingsTab === 'layers' ? 'block' : 'none';
     if (modalitiesPane) modalitiesPane.style.display = state.settingsTab === 'modalities' ? 'block' : 'none';
     if (pinmodePane) pinmodePane.style.display = state.settingsTab === 'pinmode' ? 'block' : 'none';
+    if (gazePane) gazePane.style.display = state.settingsTab === 'gaze' ? 'block' : 'none';
     if (layoutPane) layoutPane.style.display = state.settingsTab === 'layout' ? 'block' : 'none';
     
     if (state.settingsTab === 'layers') {
         renderLayersSettings();
     } else if (state.settingsTab === 'modalities') {
         renderModalitiesSettings();
+    } else if (state.settingsTab === 'gaze') {
+        updateGazeStats();
     }
-    // Layout and Pin Mode tabs are static HTML, no dynamic rendering needed
 }
 
 function renderLayersSettings() {

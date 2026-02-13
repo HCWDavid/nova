@@ -16,22 +16,22 @@
         "shortcut": "a",
         "color": "#74b9ff",
         "types": [
-            { "id": 1, "name": "Perform hand hygiene (sanitizer)", "color": "#a29bfe" },
-            { "id": 2, "name": "Put on gloves", "color": "#fd79a8" },
-            { "id": 3, "name": "Check patient's wristband", "color": "#e17055" },
+            { "id": 1, "name": "Perform Hand Hygiene", "color": "#a29bfe" },
+            { "id": 2, "name": "Put on Gloves", "color": "#fd79a8" },
+            { "id": 3, "name": "Check Patient Wristband", "color": "#e17055" },
             { "id": 4, "name": "Check Patient History Screen", "color": "#00cec9" },
             { "id": 5, "name": "Examine Med Bottle", "color": "#6c5ce7" },
-            { "id": 6, "name": "Review vital signs screen", "color": "#fdcb6e" },
-            { "id": 7, "name": "Assess vital signs (touch patient's wrist)", "color": "#e84393" },
+            { "id": 6, "name": "Review Vital Signs Screen", "color": "#fdcb6e" },
+            { "id": 7, "name": "Assess Vital Signs (Palpate Wrist)", "color": "#e84393" },
             { "id": 8, "name": "Auscultate Lung Sounds", "color": "#0984e3" },
             { "id": 9, "name": "Measure Apical Pulse", "color": "#2d98da" },
-            { "id": 10, "name": "Measure temperature", "color": "#d63031" },
-            { "id": 11, "name": "Measure blood pressure", "color": "#55a3ff" },
+            { "id": 10, "name": "Measure Temperature", "color": "#d63031" },
+            { "id": 11, "name": "Measure Blood Pressure", "color": "#55a3ff" },
             { "id": 12, "name": "Writing", "color": "#81ecec" },
             { "id": 13, "name": "Use Calculator", "color": "#fab1a0" },
             { "id": 14, "name": "Check Phone", "color": "#ffeaa7" },
-            { "id": 15, "name": "Prepare medication", "color": "#74b9ff" },
-            { "id": 16, "name": "Apply medication to patient", "color": "#a29bfe" }
+            { "id": 15, "name": "Prepare Medication", "color": "#74b9ff" },
+            { "id": 16, "name": "Apply Medication to Patient", "color": "#a29bfe" }
         ]
     },
     {

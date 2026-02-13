@@ -711,6 +711,547 @@ state.layers = state.layers.filter(l => l.id !== idTestLayerId);
 delete state.annotations[idTestLayerId];
 
 // ============================================
+// Gaze Overlay Tests
+// ============================================
+
+console.log('\n--- Gaze Data Parsing: Tobii JSON Lines ---');
+
+// Replicate parseGazeData for testing
+function parseGazeData(text, modality) {
+    const lines = text.trim().split('\n');
+    const data = [];
+    
+    const firstLine = lines[0].trim();
+    if (firstLine.startsWith('{')) {
+        for (const line of lines) {
+            try {
+                const obj = JSON.parse(line);
+                if (obj.type === 'gaze' && obj.data && obj.data.gaze2d) {
+                    data.push({
+                        timestamp: obj.timestamp,
+                        x: obj.data.gaze2d[0],
+                        y: obj.data.gaze2d[1],
+                        pupil: obj.data.eyeleft?.pupildiameter || obj.data.eyeright?.pupildiameter || 3
+                    });
+                }
+            } catch (e) {}
+        }
+        modality.timestampUnit = 's';
+        modality.dataFormat = 'tobii';
+        modality.coordinateSystem = 'normalized';
+        return data;
+    }
+    
+    // CSV fallback
+    for (const line of lines) {
+        const values = line.split(/[,\t]/).map(v => parseFloat(v.trim()));
+        if (values.length >= 3 && values.every(v => !isNaN(v))) {
+            data.push({
+                timestamp: values[modality.timestampColumn || 0],
+                x: values[modality.gazeXColumn || 1],
+                y: values[modality.gazeYColumn || 2],
+                pupil: values[3] || 3
+            });
+        }
+    }
+    return data;
+}
+
+// Test Tobii JSON Lines parsing
+const tobiiData = [
+    '{"type":"gaze","timestamp":1.0,"data":{"gaze2d":[0.5,0.3],"eyeleft":{"pupildiameter":4.2}}}',
+    '{"type":"gaze","timestamp":1.5,"data":{"gaze2d":[0.6,0.4],"eyeright":{"pupildiameter":3.8}}}',
+    '{"type":"event","timestamp":2.0,"data":{"type":"sync"}}',
+    '{"type":"gaze","timestamp":2.0,"data":{"gaze2d":[0.7,0.5]}}',
+].join('\n');
+
+const tobiiModality = { timestampUnit: 'ms', coordinateSystem: 'pixel' };
+const parsedTobii = parseGazeData(tobiiData, tobiiModality);
+
+assertEqual(parsedTobii.length, 3, 'Parsed 3 gaze points (skipped event line)');
+assertEqual(parsedTobii[0].timestamp, 1.0, 'First point timestamp = 1.0s');
+assertEqual(parsedTobii[0].x, 0.5, 'First point x = 0.5 (normalized)');
+assertEqual(parsedTobii[0].y, 0.3, 'First point y = 0.3 (normalized)');
+assertEqual(parsedTobii[0].pupil, 4.2, 'Pupil diameter from eyeleft');
+assertEqual(parsedTobii[1].pupil, 3.8, 'Pupil diameter from eyeright fallback');
+assertEqual(parsedTobii[2].pupil, 3, 'Default pupil diameter when missing');
+assertEqual(tobiiModality.timestampUnit, 's', 'Tobii sets timestamp unit to seconds');
+assertEqual(tobiiModality.coordinateSystem, 'normalized', 'Tobii sets coordinate system to normalized');
+
+console.log('\n--- Gaze Data Parsing: CSV Format ---');
+
+const csvData = '0,100,200\n500,150,250\n1000,300,400\n';
+const csvModality = { timestampColumn: 0, gazeXColumn: 1, gazeYColumn: 2 };
+const parsedCSV = parseGazeData(csvData, csvModality);
+
+assertEqual(parsedCSV.length, 3, 'Parsed 3 CSV gaze points');
+assertEqual(parsedCSV[0].timestamp, 0, 'CSV first timestamp = 0');
+assertEqual(parsedCSV[0].x, 100, 'CSV first x = 100');
+assertEqual(parsedCSV[0].y, 200, 'CSV first y = 200');
+assertEqual(parsedCSV[2].timestamp, 1000, 'CSV third timestamp = 1000');
+
+// Test CSV with invalid lines
+const csvWithBadLines = 'header,x,y\n0,100,200\nnot,a,number\n500,150,250\n';
+const parsedCSVBad = parseGazeData(csvWithBadLines, csvModality);
+assertEqual(parsedCSVBad.length, 2, 'Skips invalid CSV lines (header + bad data)');
+
+console.log('\n--- Gaze Data Parsing: Edge Cases ---');
+
+// Empty input
+const emptyModality = { timestampColumn: 0, gazeXColumn: 1, gazeYColumn: 2 };
+const parsedEmpty = parseGazeData('', emptyModality);
+assertEqual(parsedEmpty.length, 0, 'Empty input returns empty array');
+
+// Single Tobii point
+const singleTobii = '{"type":"gaze","timestamp":0.0,"data":{"gaze2d":[0.0,0.0]}}';
+const singleMod = { timestampUnit: 'ms' };
+const parsedSingle = parseGazeData(singleTobii, singleMod);
+assertEqual(parsedSingle.length, 1, 'Single Tobii point parsed');
+assertEqual(parsedSingle[0].x, 0.0, 'Gaze at origin x = 0');
+assertEqual(parsedSingle[0].y, 0.0, 'Gaze at origin y = 0');
+
+// Points at boundaries (1.0, 1.0)
+const boundaryTobii = '{"type":"gaze","timestamp":1.0,"data":{"gaze2d":[1.0,1.0]}}';
+const boundaryMod = { timestampUnit: 'ms' };
+const parsedBoundary = parseGazeData(boundaryTobii, boundaryMod);
+assertEqual(parsedBoundary[0].x, 1.0, 'Gaze at max x = 1.0');
+assertEqual(parsedBoundary[0].y, 1.0, 'Gaze at max y = 1.0');
+
+console.log('\n--- Gaze Coordinate Mapping: Video Display Area ---');
+
+// Replicate the video display area calculation from renderGazeOverlay
+function computeVideoDisplayArea(videoWidth, videoHeight, canvasWidth, canvasHeight) {
+    let videoDisplayX = 0, videoDisplayY = 0;
+    let videoDisplayW = canvasWidth, videoDisplayH = canvasHeight;
+    
+    if (videoWidth > 0 && videoHeight > 0) {
+        const videoAspect = videoWidth / videoHeight;
+        const canvasAspect = canvasWidth / canvasHeight;
+        
+        if (videoAspect > canvasAspect) {
+            // Video is wider - letterbox top/bottom
+            videoDisplayW = canvasWidth;
+            videoDisplayH = canvasWidth / videoAspect;
+            videoDisplayY = (canvasHeight - videoDisplayH) / 2;
+        } else {
+            // Video is taller - pillarbox left/right
+            videoDisplayH = canvasHeight;
+            videoDisplayW = canvasHeight * videoAspect;
+            videoDisplayX = (canvasWidth - videoDisplayW) / 2;
+        }
+    }
+    return { videoDisplayX, videoDisplayY, videoDisplayW, videoDisplayH };
+}
+
+// Replicate normalized-to-pixel mapping
+function mapGazeToCanvas(normX, normY, display) {
+    return {
+        x: display.videoDisplayX + (normX * display.videoDisplayW),
+        y: display.videoDisplayY + (normY * display.videoDisplayH)
+    };
+}
+
+// Test 1: Perfect fit (16:9 video in 16:9 canvas)
+const perfectFit = computeVideoDisplayArea(1920, 1080, 640, 360);
+assertEqual(perfectFit.videoDisplayX, 0, '16:9 in 16:9: no X offset');
+assertEqual(perfectFit.videoDisplayY, 0, '16:9 in 16:9: no Y offset');
+assertEqual(perfectFit.videoDisplayW, 640, '16:9 in 16:9: full width');
+assertEqual(perfectFit.videoDisplayH, 360, '16:9 in 16:9: full height');
+
+// Test 2: Letterbox (16:9 video in 4:3 canvas → bars top/bottom)
+const letterbox = computeVideoDisplayArea(1920, 1080, 640, 480);
+assertEqual(letterbox.videoDisplayX, 0, 'Letterbox: no X offset');
+assertEqual(letterbox.videoDisplayW, 640, 'Letterbox: full width');
+assert(letterbox.videoDisplayY > 0, 'Letterbox: Y offset > 0 (bars on top)');
+assert(letterbox.videoDisplayH < 480, 'Letterbox: display height < canvas height');
+assertApprox(letterbox.videoDisplayH, 360, 1, 'Letterbox: display height ≈ 360');
+
+// Test 3: Pillarbox (4:3 video in 16:9 canvas → bars left/right)
+const pillarbox = computeVideoDisplayArea(640, 480, 640, 360);
+assertEqual(pillarbox.videoDisplayY, 0, 'Pillarbox: no Y offset');
+assertEqual(pillarbox.videoDisplayH, 360, 'Pillarbox: full height');
+assert(pillarbox.videoDisplayX > 0, 'Pillarbox: X offset > 0 (bars on sides)');
+assert(pillarbox.videoDisplayW < 640, 'Pillarbox: display width < canvas width');
+assertApprox(pillarbox.videoDisplayW, 480, 1, 'Pillarbox: display width ≈ 480');
+
+console.log('\n--- Gaze Coordinate Mapping: Normalized to Pixel ---');
+
+// In perfect fit, (0.5, 0.5) → center of canvas
+const centerPerfect = mapGazeToCanvas(0.5, 0.5, perfectFit);
+assertEqual(centerPerfect.x, 320, 'Perfect fit: center x = 320');
+assertEqual(centerPerfect.y, 180, 'Perfect fit: center y = 180');
+
+// In perfect fit, (0, 0) → top-left
+const topLeftPerfect = mapGazeToCanvas(0, 0, perfectFit);
+assertEqual(topLeftPerfect.x, 0, 'Perfect fit: top-left x = 0');
+assertEqual(topLeftPerfect.y, 0, 'Perfect fit: top-left y = 0');
+
+// In perfect fit, (1, 1) → bottom-right
+const bottomRightPerfect = mapGazeToCanvas(1, 1, perfectFit);
+assertEqual(bottomRightPerfect.x, 640, 'Perfect fit: bottom-right x = 640');
+assertEqual(bottomRightPerfect.y, 360, 'Perfect fit: bottom-right y = 360');
+
+// In letterbox, (0.5, 0.5) → center of VIDEO area, not canvas
+const centerLetterbox = mapGazeToCanvas(0.5, 0.5, letterbox);
+assertEqual(centerLetterbox.x, 320, 'Letterbox: center x = 320 (still centered)');
+assertApprox(centerLetterbox.y, 240, 1, 'Letterbox: center y ≈ 240 (center of canvas)');
+
+// In pillarbox, (0, 0) → offset by pillarbox bars
+const topLeftPillarbox = mapGazeToCanvas(0, 0, pillarbox);
+assert(topLeftPillarbox.x > 0, 'Pillarbox: top-left x > 0 (offset by side bars)');
+assertEqual(topLeftPillarbox.y, 0, 'Pillarbox: top-left y = 0');
+
+console.log('\n--- Gaze Coordinate Mapping: Resize Consistency ---');
+
+// When canvas resizes, the Display area should recalculate correctly
+// Simulate: same 16:9 video at different canvas sizes (browser resize)
+const smallCanvas = computeVideoDisplayArea(1920, 1080, 320, 180);
+const largeCanvas = computeVideoDisplayArea(1920, 1080, 1280, 720);
+
+// Center gaze should always map to center of canvas
+const centerSmall = mapGazeToCanvas(0.5, 0.5, smallCanvas);
+const centerLarge = mapGazeToCanvas(0.5, 0.5, largeCanvas);
+
+assertEqual(centerSmall.x, 160, 'Small canvas: center x = half of 320');
+assertEqual(centerSmall.y, 90, 'Small canvas: center y = half of 180');
+assertEqual(centerLarge.x, 640, 'Large canvas: center x = half of 1280');
+assertEqual(centerLarge.y, 360, 'Large canvas: center y = half of 720');
+
+// Normalized ratios should be preserved across resizes
+assertApprox(centerSmall.x / 320, 0.5, 0.01, 'Small canvas: gaze ratio preserved');
+assertApprox(centerLarge.x / 1280, 0.5, 0.01, 'Large canvas: gaze ratio preserved');
+
+// Test non-center point (0.25, 0.75) at different sizes
+const quarterSmall = mapGazeToCanvas(0.25, 0.75, smallCanvas);
+const quarterLarge = mapGazeToCanvas(0.25, 0.75, largeCanvas);
+assertApprox(quarterSmall.x / 320, quarterLarge.x / 1280, 0.01, 'X ratio consistent across resize');
+assertApprox(quarterSmall.y / 180, quarterLarge.y / 720, 0.01, 'Y ratio consistent across resize');
+
+console.log('\n--- Gaze Binary Search: Closest Point ---');
+
+// Replicate binary search from renderGazeOverlay
+function findClosestGazePoint(data, targetTime) {
+    let closestIdx = 0;
+    let closestDiff = Infinity;
+    
+    for (let i = 0; i < data.length; i++) {
+        const timestamp = data[i].timestamp;
+        const diff = Math.abs(timestamp - targetTime);
+        if (diff < closestDiff) {
+            closestDiff = diff;
+            closestIdx = i;
+        }
+        if (timestamp > targetTime && diff > closestDiff) break;
+    }
+    return closestIdx;
+}
+
+const testGazeData = [
+    { timestamp: 0.0, x: 0.1, y: 0.1 },
+    { timestamp: 0.5, x: 0.2, y: 0.2 },
+    { timestamp: 1.0, x: 0.3, y: 0.3 },
+    { timestamp: 1.5, x: 0.4, y: 0.4 },
+    { timestamp: 2.0, x: 0.5, y: 0.5 },
+];
+
+assertEqual(findClosestGazePoint(testGazeData, 0.0), 0, 'Exact match at start');
+assertEqual(findClosestGazePoint(testGazeData, 2.0), 4, 'Exact match at end');
+assertEqual(findClosestGazePoint(testGazeData, 1.0), 2, 'Exact match in middle');
+assertEqual(findClosestGazePoint(testGazeData, 0.3), 1, 'Closest to 0.3s is index 1 (0.5s)');
+assertEqual(findClosestGazePoint(testGazeData, 1.2), 2, 'Closest to 1.2s is index 2 (1.0s)');
+assertEqual(findClosestGazePoint(testGazeData, 1.3), 3, 'Closest to 1.3s is index 3 (1.5s)');
+assertEqual(findClosestGazePoint(testGazeData, 99.0), 4, 'Beyond data returns last point');
+
+console.log('\n--- Gaze Processing: Smoothing Filters ---');
+
+// Replicate applyGazeFilter for testing
+function applyGazeFilter(rawData, config) {
+    if (config.filter === 'none' || !rawData || rawData.length === 0) {
+        return rawData.map(p => ({ ...p }));
+    }
+    const win = Math.max(1, config.filterWindow);
+    const half = Math.floor(win / 2);
+    const result = [];
+    for (let i = 0; i < rawData.length; i++) {
+        const start = Math.max(0, i - half);
+        const end = Math.min(rawData.length - 1, i + half);
+        const wp = rawData.slice(start, end + 1);
+        let x, y;
+        if (config.filter === 'moving-average') {
+            x = wp.reduce((s, p) => s + p.x, 0) / wp.length;
+            y = wp.reduce((s, p) => s + p.y, 0) / wp.length;
+        } else if (config.filter === 'median') {
+            const sx = wp.map(p => p.x).sort((a, b) => a - b);
+            const sy = wp.map(p => p.y).sort((a, b) => a - b);
+            const mid = Math.floor(sx.length / 2);
+            x = sx.length % 2 ? sx[mid] : (sx[mid - 1] + sx[mid]) / 2;
+            y = sy.length % 2 ? sy[mid] : (sy[mid - 1] + sy[mid]) / 2;
+        }
+        result.push({ ...rawData[i], x, y });
+    }
+    return result;
+}
+
+// Moving average test
+const filterInput = [
+    { timestamp: 0, x: 0.0, y: 0.0 },
+    { timestamp: 1, x: 0.2, y: 0.1 },
+    { timestamp: 2, x: 0.4, y: 0.2 },
+    { timestamp: 3, x: 0.6, y: 0.3 },
+    { timestamp: 4, x: 0.8, y: 0.4 },
+];
+
+const maResult = applyGazeFilter(filterInput, { filter: 'moving-average', filterWindow: 3 });
+assertEqual(maResult.length, 5, 'MA filter preserves point count');
+assertApprox(maResult[1].x, 0.2, 0.01, 'MA center point: avg of [0.0, 0.2, 0.4] = 0.2');
+assertApprox(maResult[2].x, 0.4, 0.01, 'MA: avg of [0.2, 0.4, 0.6] = 0.4');
+assertEqual(maResult[0].timestamp, 0, 'MA preserves timestamps');
+
+// No filter test
+const noFilterResult = applyGazeFilter(filterInput, { filter: 'none', filterWindow: 3 });
+assertEqual(noFilterResult[0].x, 0.0, 'No filter: values unchanged');
+
+// Median filter test
+const medianInput = [
+    { timestamp: 0, x: 0.1, y: 0.1 },
+    { timestamp: 1, x: 0.5, y: 0.5 },  // outlier
+    { timestamp: 2, x: 0.12, y: 0.12 },
+    { timestamp: 3, x: 0.11, y: 0.11 },
+    { timestamp: 4, x: 0.13, y: 0.13 },
+];
+
+const medResult = applyGazeFilter(medianInput, { filter: 'median', filterWindow: 3 });
+assertEqual(medResult.length, 5, 'Median filter preserves point count');
+assertEqual(medResult[1].x, 0.12, 'Median removes outlier: median of [0.1, 0.5, 0.12] = 0.12');
+assert(medResult[1].x < 0.2, 'Median suppresses outlier spike');
+
+// Empty data
+const emptyFilterResult = applyGazeFilter([], { filter: 'moving-average', filterWindow: 3 });
+assertEqual(emptyFilterResult.length, 0, 'Filter handles empty data');
+
+console.log('\n--- Gaze Processing: I-VT Fixation Detection ---');
+
+// Replicate I-VT and helpers for testing
+function createFixation(points) {
+    const x = points.reduce((s, p) => s + p.x, 0) / points.length;
+    const y = points.reduce((s, p) => s + p.y, 0) / points.length;
+    return {
+        x, y,
+        startTime: points[0].timestamp,
+        endTime: points[points.length - 1].timestamp,
+        duration: points[points.length - 1].timestamp - points[0].timestamp,
+        pointCount: points.length,
+    };
+}
+
+function detectFixationsIVT(filteredData, config) {
+    if (!filteredData || filteredData.length < 2) return [];
+    const threshold = config.ivtThreshold;
+    const fixations = [];
+    let currentFixationPoints = [];
+    for (let i = 0; i < filteredData.length; i++) {
+        let velocity = 0;
+        if (i > 0) {
+            const dt = filteredData[i].timestamp - filteredData[i - 1].timestamp;
+            if (dt > 0) {
+                const dx = filteredData[i].x - filteredData[i - 1].x;
+                const dy = filteredData[i].y - filteredData[i - 1].y;
+                velocity = Math.sqrt(dx * dx + dy * dy) / dt;
+            }
+        }
+        if (velocity <= threshold) {
+            currentFixationPoints.push(filteredData[i]);
+        } else {
+            if (currentFixationPoints.length >= 2) {
+                fixations.push(createFixation(currentFixationPoints));
+            }
+            currentFixationPoints = [];
+        }
+    }
+    if (currentFixationPoints.length >= 2) {
+        fixations.push(createFixation(currentFixationPoints));
+    }
+    return fixations;
+}
+
+// Stationary points → one fixation
+const stationaryData = [
+    { timestamp: 0.0, x: 0.5, y: 0.5 },
+    { timestamp: 0.1, x: 0.50, y: 0.50 },
+    { timestamp: 0.2, x: 0.51, y: 0.50 },
+    { timestamp: 0.3, x: 0.50, y: 0.51 },
+];
+const ivtFixations1 = detectFixationsIVT(stationaryData, { ivtThreshold: 0.5 });
+assertEqual(ivtFixations1.length, 1, 'I-VT: stationary points → 1 fixation');
+assertApprox(ivtFixations1[0].x, 0.5025, 0.01, 'I-VT: fixation centroid x ≈ 0.5');
+assertApprox(ivtFixations1[0].duration, 0.3, 0.01, 'I-VT: fixation duration = 0.3s');
+
+// Saccade between two fixations
+const saccadeData = [
+    { timestamp: 0.0, x: 0.2, y: 0.2 },
+    { timestamp: 0.1, x: 0.2, y: 0.2 },
+    { timestamp: 0.15, x: 0.8, y: 0.8 },  // saccade (velocity = 0.05s, displacement ≈ 0.85)
+    { timestamp: 0.25, x: 0.8, y: 0.8 },
+    { timestamp: 0.35, x: 0.8, y: 0.8 },
+];
+const ivtFixations2 = detectFixationsIVT(saccadeData, { ivtThreshold: 0.5 });
+assertEqual(ivtFixations2.length, 2, 'I-VT: saccade splits into 2 fixations');
+assertApprox(ivtFixations2[0].x, 0.2, 0.01, 'I-VT: first fixation at x=0.2');
+assertApprox(ivtFixations2[1].x, 0.8, 0.01, 'I-VT: second fixation at x=0.8');
+
+// Single point
+const singlePointIVT = detectFixationsIVT([{ timestamp: 0, x: 0.5, y: 0.5 }], { ivtThreshold: 0.5 });
+assertEqual(singlePointIVT.length, 0, 'I-VT: single point → no fixations');
+
+console.log('\n--- Gaze Processing: I-DT Fixation Detection ---');
+
+function detectFixationsIDT(filteredData, config) {
+    if (!filteredData || filteredData.length < 2) return [];
+    const dispThreshold = config.idtDispersion;
+    const minDurationSec = config.idtMinDuration / 1000;
+    const fixations = [];
+    let i = 0;
+    while (i < filteredData.length) {
+        let windowEnd = i;
+        while (windowEnd < filteredData.length) {
+            const wp = filteredData.slice(i, windowEnd + 1);
+            const xs = wp.map(p => p.x);
+            const ys = wp.map(p => p.y);
+            const dispersion = (Math.max(...xs) - Math.min(...xs)) + (Math.max(...ys) - Math.min(...ys));
+            if (dispersion > dispThreshold) break;
+            windowEnd++;
+        }
+        const fixPoints = filteredData.slice(i, windowEnd);
+        if (fixPoints.length >= 2) {
+            const duration = fixPoints[fixPoints.length - 1].timestamp - fixPoints[0].timestamp;
+            if (duration >= minDurationSec) {
+                fixations.push(createFixation(fixPoints));
+                i = windowEnd;
+                continue;
+            }
+        }
+        i++;
+    }
+    return fixations;
+}
+
+// Tight cluster → one fixation
+const tightCluster = [
+    { timestamp: 0.0, x: 0.50, y: 0.50 },
+    { timestamp: 0.05, x: 0.51, y: 0.50 },
+    { timestamp: 0.10, x: 0.50, y: 0.51 },
+    { timestamp: 0.15, x: 0.51, y: 0.51 },
+];
+const idtFixations1 = detectFixationsIDT(tightCluster, { idtDispersion: 0.03, idtMinDuration: 100 });
+assertEqual(idtFixations1.length, 1, 'I-DT: tight cluster → 1 fixation');
+assertApprox(idtFixations1[0].duration, 0.15, 0.01, 'I-DT: fixation duration = 0.15s');
+
+// Too-short cluster rejected
+const shortCluster = [
+    { timestamp: 0.0, x: 0.50, y: 0.50 },
+    { timestamp: 0.03, x: 0.51, y: 0.50 },
+];
+const idtFixations2 = detectFixationsIDT(shortCluster, { idtDispersion: 0.03, idtMinDuration: 100 });
+assertEqual(idtFixations2.length, 0, 'I-DT: cluster below min duration → rejected');
+
+// Dispersed points
+const dispersedData = [
+    { timestamp: 0.0, x: 0.1, y: 0.1 },
+    { timestamp: 0.1, x: 0.5, y: 0.5 },
+    { timestamp: 0.2, x: 0.9, y: 0.9 },
+];
+const idtFixations3 = detectFixationsIDT(dispersedData, { idtDispersion: 0.03, idtMinDuration: 50 });
+assertEqual(idtFixations3.length, 0, 'I-DT: dispersed points → no fixations');
+
+// Empty data
+const idtFixations4 = detectFixationsIDT([], { idtDispersion: 0.03, idtMinDuration: 100 });
+assertEqual(idtFixations4.length, 0, 'I-DT: empty data → no fixations');
+
+console.log('\n--- Gaze Processing: Full Pipeline ---');
+
+// Test processGazeData-like pipeline
+function runPipeline(rawData, config) {
+    const processed = applyGazeFilter(rawData, config);
+    let fixations;
+    if (config.fixationAlgo === 'ivt') {
+        fixations = detectFixationsIVT(processed, config);
+    } else if (config.fixationAlgo === 'idt') {
+        fixations = detectFixationsIDT(processed, config);
+    } else {
+        fixations = [];
+    }
+    return { processed, fixations };
+}
+
+const pipelineData = [
+    { timestamp: 0.0, x: 0.3, y: 0.3 },
+    { timestamp: 0.1, x: 0.31, y: 0.30 },
+    { timestamp: 0.2, x: 0.30, y: 0.31 },
+    { timestamp: 0.3, x: 0.31, y: 0.30 },
+    { timestamp: 0.35, x: 0.7, y: 0.7 },  // saccade
+    { timestamp: 0.45, x: 0.7, y: 0.7 },
+    { timestamp: 0.55, x: 0.71, y: 0.70 },
+    { timestamp: 0.65, x: 0.70, y: 0.71 },
+];
+
+const pipeResult = runPipeline(pipelineData, {
+    filter: 'moving-average', filterWindow: 3,
+    fixationAlgo: 'ivt', ivtThreshold: 0.5,
+});
+
+assertEqual(pipeResult.processed.length, 8, 'Pipeline: all points preserved after filter');
+assertEqual(pipeResult.fixations.length, 2, 'Pipeline: 2 fixations detected');
+assertApprox(pipeResult.fixations[0].x, 0.305, 0.02, 'Pipeline: first fixation near x=0.3');
+assertApprox(pipeResult.fixations[1].x, 0.7025, 0.02, 'Pipeline: second fixation near x=0.7');
+
+// No processing
+const noProcResult = runPipeline(pipelineData, {
+    filter: 'none', filterWindow: 1,
+    fixationAlgo: 'none',
+});
+assertEqual(noProcResult.fixations.length, 0, 'Pipeline: no fixation algo → empty fixations');
+
+
+console.log('\n--- Gaze Sync: Timestamp Alignment Heuristic ---');
+
+// Test autoAlign logic (simplified, no DOM)
+function testAutoAlign(gazeStart, gazeEnd, timestampUnit, videoDuration) {
+    const gazeStartSec = timestampUnit === 's' ? gazeStart : gazeStart / 1000;
+    const gazeDuration = gazeEnd - gazeStart;
+    const gazeDurationSec = timestampUnit === 's' ? gazeDuration : gazeDuration / 1000;
+    
+    if (gazeStartSec > 1e9) {
+        return -(timestampUnit === 's' ? gazeStart * 1000 : gazeStart);
+    } else if (gazeStartSec > 1 && Math.abs(gazeDurationSec - videoDuration) / videoDuration < 0.3) {
+        return -(timestampUnit === 's' ? gazeStart * 1000 : gazeStart);
+    } else if (gazeStartSec >= 0 && gazeStartSec < 1) {
+        const offset = -(timestampUnit === 's' ? gazeStart * 1000 : gazeStart);
+        return Math.abs(offset) < 10 ? 0 : offset;
+    }
+    return 0;
+}
+
+// Unix epoch detection
+const epochOffset = testAutoAlign(1707840000, 1707840300, 's', 300);
+assert(epochOffset < -1e12, 'Auto-align: Unix epoch detected → large negative offset');
+
+// Start offset correction
+const startOffset = testAutoAlign(5.0, 305.0, 's', 300);
+assertEqual(startOffset, -5000, 'Auto-align: gaze starts at 5s → offset = -5000ms');
+
+// Already aligned
+const alignedOffset = testAutoAlign(0.005, 300.005, 's', 300);
+assertEqual(alignedOffset, 0, 'Auto-align: <10ms offset → no adjustment');
+
+// Large start offset alignment
+const largeStartOffset = testAutoAlign(2.5, 302.5, 's', 300);
+assertEqual(largeStartOffset, -2500, 'Auto-align: gaze starts at 2.5s → offset = -2500ms');
+
+// Ms timestamps start offset
+const msOffset = testAutoAlign(500, 300500, 'ms', 300);
+assertEqual(msOffset, -500, 'Auto-align: ms timestamps starting at 500ms → offset = -500ms');
+
+// ============================================
 // Summary
 // ============================================
 
