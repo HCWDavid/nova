@@ -32,7 +32,8 @@
  * - [x] add import annotations from JSON (header Import button)
  * - [x] add layers import/export in Settings
  * - [x] add export annotations name to JSON
- * 
+ * - [x] forward/backward to 5 second
+ * - [x] annotation list is not layout properly
  * 
  * Question: 
  * - why dont u use this app or feature that are lacking? 
@@ -288,8 +289,8 @@ function setupEventListeners() {
     
     // Playback
     document.getElementById('play-pause-btn')?.addEventListener('click', togglePlayPause);
-    document.getElementById('frame-back-btn')?.addEventListener('click', () => stepFrame(-1));
-    document.getElementById('frame-forward-btn')?.addEventListener('click', () => stepFrame(1));
+    document.getElementById('frame-back-btn')?.addEventListener('click', () => stepTime(-5));
+    document.getElementById('frame-forward-btn')?.addEventListener('click', () => stepTime(5));
     document.getElementById('playback-speed')?.addEventListener('change', handleSpeedChange);
     document.getElementById('seek-slider')?.addEventListener('input', handleSeek);
     
@@ -1911,6 +1912,16 @@ function stepFrame(direction) {
     const masterEl = document.getElementById('video-' + master.id);
     if (masterEl) {
         masterEl.currentTime += direction / state.fps;
+    }
+}
+
+function stepTime(seconds) {
+    const master = state.modalities.find(m => m.id === state.masterModalityId);
+    if (!master) return;
+    
+    const masterEl = document.getElementById('video-' + master.id);
+    if (masterEl) {
+        masterEl.currentTime = Math.max(0, masterEl.currentTime + seconds);
     }
 }
 

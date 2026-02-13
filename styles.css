@@ -646,6 +646,8 @@ body.resize-mode .resize-mode-overlay {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    overflow: hidden;
+    min-height: 0;
 }
 
 .mode-tabs {
