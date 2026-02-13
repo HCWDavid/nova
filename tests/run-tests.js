@@ -1347,6 +1347,74 @@ assertEqual(minimalParsed.video, null, 'Transcript parse: missing video → null
 assertEqual(minimalParsed.duration, null, 'Transcript parse: missing duration → null');
 assertEqual(minimalParsed.speakers.length, 0, 'Transcript parse: missing speakers → empty');
 
+console.log('\n--- CSV Export/Import ---');
+
+// csvEscape (replicated from app.js)
+function csvEscape(value) {
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+}
+
+// parseCSVLine (replicated from app.js)
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { current += ch; }
+        } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { result.push(current); current = ''; }
+            else { current += ch; }
+        }
+    }
+    result.push(current);
+    return result;
+}
+
+// csvEscape tests
+assertEqual(csvEscape('hello'), 'hello', 'csvEscape: plain string → unchanged');
+assertEqual(csvEscape('a,b'), '"a,b"', 'csvEscape: comma → quoted');
+assertEqual(csvEscape('say "hi"'), '"say ""hi"""', 'csvEscape: quotes → escaped');
+assertEqual(csvEscape('line1\nline2'), '"line1\nline2"', 'csvEscape: newline → quoted');
+assertEqual(csvEscape(''), '', 'csvEscape: empty → empty');
+
+// parseCSVLine tests
+const csv1 = parseCSVLine('Action,Walking,1.000,5.500,');
+assertEqual(csv1.length, 5, 'parseCSVLine: 5 columns');
+assertEqual(csv1[0], 'Action', 'parseCSVLine: first col');
+assertEqual(csv1[1], 'Walking', 'parseCSVLine: second col');
+assertEqual(csv1[2], '1.000', 'parseCSVLine: third col');
+assertEqual(csv1[4], '', 'parseCSVLine: empty last col');
+
+// Quoted fields
+const csv2 = parseCSVLine('Action,"Walking, fast",1.000,5.500,"a ""note"""');
+assertEqual(csv2[1], 'Walking, fast', 'parseCSVLine: quoted field with comma');
+assertEqual(csv2[4], 'a "note"', 'parseCSVLine: quoted field with escaped quotes');
+
+// Round-trip
+const original = 'Hello, "world"';
+const escaped = csvEscape(original);
+const csvParsed = parseCSVLine(`action,${escaped},1,2`);
+assertEqual(csvParsed[1], original, 'CSV round-trip: escape → parse preserves value');
+
+console.log('\n--- Annotation Comment ---');
+
+// Annotation record with comment
+const annWithComment = { id: 1, typeId: 'a', typeName: 'Walk', startTime: 1.0, endTime: 5.0, comment: 'patient stumbled' };
+assertEqual(annWithComment.comment, 'patient stumbled', 'Annotation: comment field preserved');
+
+// Annotation without comment
+const annNoComment = { id: 2, typeId: 'a', typeName: 'Walk', startTime: 6.0, endTime: 10.0 };
+assertEqual(annNoComment.comment, undefined, 'Annotation: missing comment → undefined');
+
 // ============================================
 // Summary
 // ============================================

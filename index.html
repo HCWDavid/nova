@@ -24,6 +24,10 @@
                     <label>Annotator:</label>
                     <input type="text" id="annotator-name" placeholder="Your name" value="">
                 </div>
+                <button id="import-btn" class="btn btn-secondary" title="Import annotations">
+                    <span>📂</span> Import
+                </button>
+                <input type="file" id="import-annotations-input" accept=".json,.csv" hidden>
                 <button id="export-btn" class="btn btn-primary" disabled>
                     <span>📥</span> Export
                 </button>
@@ -80,6 +84,10 @@
                             <option value="1.5">1.5x</option>
                             <option value="2">2x</option>
                         </select>
+                    </div>
+                    <div class="volume-controls">
+                        <button id="mute-btn" class="control-btn small" title="Mute/Unmute (M)">🔊</button>
+                        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" title="Volume">
                     </div>
                 </div>
 
@@ -205,6 +213,38 @@
             <button id="video-picker-cancel" class="btn btn-secondary">Cancel</button>
         </div>
 
+        <!-- Export Dialog -->
+        <div id="export-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>📥 Export</h2>
+                    <button id="export-modal-close" class="modal-close">×</button>
+                </div>
+                <div class="modal-body">
+                    <p class="settings-intro">Paste the full file path to build your export filename from its segments.</p>
+                    <label class="export-label">Source Path</label>
+                    <input type="text" id="export-source-path" placeholder="/Users/.../session1/scenevideo.mp4" class="export-input">
+                    <label class="export-label">Path Segments (click to toggle)</label>
+                    <div id="export-path-chips" class="export-chips">
+                        <!-- Dynamically generated -->
+                    </div>
+                    <label class="export-label">Custom Name</label>
+                    <input type="text" id="export-custom-name" placeholder="Or type your own..." class="export-input">
+                    <label class="export-label">Format</label>
+                    <div class="export-format-row">
+                        <label><input type="radio" name="export-format" value="json" checked> JSON</label>
+                        <label><input type="radio" name="export-format" value="csv"> CSV</label>
+                    </div>
+                    <label class="export-label">Preview</label>
+                    <div id="export-preview" class="export-preview">nova_export.json</div>
+                    <div class="export-actions">
+                        <button class="btn btn-primary" id="export-confirm-btn">📥 Download</button>
+                        <button class="btn btn-secondary" id="export-cancel-btn">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Settings Modal -->
         <div id="settings-modal" class="modal">
             <div class="modal-content modal-large">
@@ -232,6 +272,9 @@
                         <div class="settings-actions">
                             <button id="add-layer-btn" class="btn btn-secondary">➕ Add Layer</button>
                             <button id="reset-layers-btn" class="btn btn-danger-outline">↻ Reset Defaults</button>
+                            <button class="btn btn-secondary" onclick="exportLayersJSON()" title="Export layer definitions">📤 Export Layers</button>
+                            <button class="btn btn-secondary" onclick="document.getElementById('import-layers-input').click()" title="Import layer definitions">📂 Import Layers</button>
+                            <input type="file" id="import-layers-input" accept=".json" hidden>
                         </div>
                     </div>
                     

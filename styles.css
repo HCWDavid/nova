@@ -1919,3 +1919,203 @@ body.resize-mode .resize-mode-overlay {
     text-transform: uppercase;
     margin-bottom: 2px;
 }
+
+/* ============================================
+   Volume Controls
+   ============================================ */
+
+.volume-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
+}
+
+#volume-slider {
+    width: 80px;
+    height: 4px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+/* ============================================
+   Annotations List Header & CSV Actions
+   ============================================ */
+
+.annotations-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px;
+}
+
+.annotations-list-header h3 {
+    margin: 0;
+}
+
+.annotations-list-actions {
+    display: flex;
+    gap: 4px;
+}
+
+/* ============================================
+   Annotation Item — Comment & Edit
+   ============================================ */
+
+.annotation-item {
+    position: relative;
+}
+
+.item-comment {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 2px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.annotation-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border-radius: 6px;
+    border: 1px solid var(--primary);
+    margin-bottom: 4px;
+}
+
+.annotation-edit-form label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.annotation-edit-form input,
+.annotation-edit-form select,
+.annotation-edit-form textarea {
+    font-size: 12px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.annotation-edit-form textarea {
+    resize: vertical;
+    min-height: 40px;
+}
+
+.edit-form-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.edit-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    color: var(--text-muted);
+}
+
+.edit-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Export Dialog
+   ============================================ */
+
+.export-label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin: 10px 0 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.export-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.export-chip {
+    padding: 5px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    cursor: pointer;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.export-chip:hover {
+    border-color: var(--primary);
+}
+
+.export-chip.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
+.export-input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.export-format-row {
+    display: flex;
+    gap: 16px;
+    padding: 6px 0;
+}
+
+.export-format-row label {
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text-primary);
+}
+
+.export-preview {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+    font-size: 13px;
+    color: var(--primary);
+    word-break: break-all;
+}
+
+.export-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+/* Settings actions wrap */
+.settings-actions {
+    flex-wrap: wrap;
+}

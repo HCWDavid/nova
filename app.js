@@ -5,30 +5,33 @@
  * Phase 1: Multi-Video Support
  * Phase 3: Overlay Modalities (Gaze, Heatmap)
  * TODO: 
- * - add mute
- * - add volume control
- * - add comments 
- * - add editable timestamp tool = annotations 
- * - add export annotations to csv
- * - add import annotations from csv
- * - unit test and consistent 
  * - scoping into two minuates from 15 mins
  * - change layers => tracks
  * - mechanism: refresh page prevention while its not 'exported' 
- * - when export, make sure to have the option of including video name to the exported file.
  * - input an input field for the time unit consistent throughout the session
  * - use this time unit to range in or range out the video range for more focused analysis. 
  * FIXED:
  * 02/10/2026
  * - [x] adding a new layer didn't work with the new layer annotation (v0.2.1 - initialized annotations array for new layers)
  * - [x] having only 'start-end' button for 1 frame instead of two buttons (like a button call "mark this frame" or something)
- * 02/13/2026
+ * 02/13/2026 (1):
  * - [x] gaze potentially wrong with resizing browser or h*w
  * - [x] add fixation processing instead of raw data
  * - [x] add temporal sync for gaze data
  * 
  * 02/13/2026 (2):
  * - [x] add transcript
+ * 
+ * 02/13/2026 (3):
+ * - [x] add mute button
+ * - [x] add volume control
+ * - [x] add comments on annotations
+ * - [x] add editable timestamp/label on annotations (inline edit form)
+ * - [x] add export annotations to CSV
+ * - [x] add import annotations from CSV
+ * - [x] add import annotations from JSON (header Import button)
+ * - [x] add layers import/export in Settings
+ * - [x] add export annotations name to JSON
  * 
  * 
  * Question: 
@@ -140,6 +143,7 @@ const state = {
     
     // Transcript
     transcript: null,
+    exportSourcePath: '',
 };
 
 // ============================================
@@ -293,8 +297,18 @@ function setupEventListeners() {
     document.getElementById('start-annotation-btn')?.addEventListener('click', startAnnotation);
     document.getElementById('end-annotation-btn')?.addEventListener('click', endAnnotation);
     
-    // Export
+    // Export & Import
     document.getElementById('export-btn')?.addEventListener('click', exportAnnotations);
+    document.getElementById('import-btn')?.addEventListener('click', () => {
+        document.getElementById('import-annotations-input')?.click();
+    });
+    document.getElementById('import-annotations-input')?.addEventListener('change', importAnnotationsJSON);
+    document.getElementById('import-csv-input')?.addEventListener('change', importAnnotationsCSV);
+    document.getElementById('import-layers-input')?.addEventListener('change', importLayersJSON);
+    
+    // Mute & Volume
+    document.getElementById('mute-btn')?.addEventListener('click', toggleMute);
+    document.getElementById('volume-slider')?.addEventListener('input', handleVolumeChange);
     
     // Annotator name
     document.getElementById('annotator-name')?.addEventListener('change', (e) => {
@@ -2218,16 +2232,25 @@ function renderAnnotationsList() {
     if (countEl) countEl.textContent = `(${allAnnotations.length})`;
     
     allAnnotations.forEach(ann => {
+        const commentHtml = ann.comment ? `<div class="item-comment" title="${ann.comment}">${ann.comment}</div>` : '';
+        
         const div = document.createElement('div');
         div.className = 'annotation-item';
+        div.dataset.annId = ann.id;
         div.innerHTML = `
             <span class="item-color" style="background: ${ann.color}"></span>
             <div class="item-info">
                 <div class="item-name">${ann.typeName}</div>
                 <div class="item-time">${formatTime(ann.startTime * 1000)} → ${formatTime(ann.endTime * 1000)}</div>
+                ${commentHtml}
             </div>
+            <button class="edit-btn" title="Edit">✏️</button>
             <button class="delete-btn" title="Delete">×</button>
         `;
+        div.querySelector('.edit-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            editAnnotation(ann.layerId, ann.id);
+        });
         div.querySelector('.delete-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             state.annotations[ann.layerId] = state.annotations[ann.layerId].filter(a => a.id !== ann.id);
@@ -2453,6 +2476,134 @@ function handleKeyPress(e) {
 // ============================================
 
 function exportAnnotations() {
+    const modal = document.getElementById('export-modal');
+    if (!modal) return;
+    
+    const master = state.modalities.find(m => m.id === state.masterModalityId);
+    const videoName = master?.name || 'unknown';
+    
+    // Populate source path input with saved path or fallback to video name
+    const pathInput = document.getElementById('export-source-path');
+    if (pathInput) {
+        pathInput.value = state.exportSourcePath || videoName;
+        pathInput.oninput = () => {
+            state.exportSourcePath = pathInput.value;
+            refreshExportChips();
+        };
+    }
+    
+    refreshExportChips();
+    
+    // Clear custom name
+    document.getElementById('export-custom-name').value = '';
+    
+    // Default to JSON
+    document.querySelector('input[name="export-format"][value="json"]').checked = true;
+    
+    updateExportPreview();
+    modal.style.display = 'flex';
+    
+    // Wire events
+    const closeBtn = document.getElementById('export-modal-close');
+    const cancelBtn = document.getElementById('export-cancel-btn');
+    const confirmBtn = document.getElementById('export-confirm-btn');
+    const customInput = document.getElementById('export-custom-name');
+    
+    const closeModal = () => modal.style.display = 'none';
+    
+    closeBtn.onclick = closeModal;
+    cancelBtn.onclick = closeModal;
+    confirmBtn.onclick = () => { performExport(); closeModal(); };
+    customInput.oninput = updateExportPreview;
+    
+    // Format radio change
+    document.querySelectorAll('input[name="export-format"]').forEach(r => {
+        r.onchange = updateExportPreview;
+    });
+}
+
+function refreshExportChips() {
+    const pathInput = document.getElementById('export-source-path');
+    const sourcePath = pathInput?.value || '';
+    
+    // Tokenize by path separators, underscores, hyphens, spaces, dots (but keep meaningful tokens)
+    const segments = sourcePath
+        .replace(/\.[^.]+$/, '') // strip file extension
+        .split(/[\/\\]+/)       // split by path separators
+        .filter(s => s.length > 0);
+    
+    const chipsContainer = document.getElementById('export-path-chips');
+    chipsContainer.innerHTML = '';
+    
+    segments.forEach((seg, i) => {
+        const chip = document.createElement('span');
+        // Only activate the last 2 segments by default (likely the most relevant)
+        chip.className = 'export-chip' + (i >= segments.length - 2 ? ' active' : '');
+        chip.textContent = seg;
+        chip.dataset.index = i;
+        chip.addEventListener('click', () => {
+            chip.classList.toggle('active');
+            updateExportPreview();
+        });
+        chipsContainer.appendChild(chip);
+    });
+    
+    // Also add annotator as a chip if set
+    if (state.annotatorName) {
+        const chip = document.createElement('span');
+        chip.className = 'export-chip active';
+        chip.textContent = state.annotatorName;
+        chip.dataset.index = 'annotator';
+        chip.addEventListener('click', () => {
+            chip.classList.toggle('active');
+            updateExportPreview();
+        });
+        chipsContainer.appendChild(chip);
+    }
+    
+    updateExportPreview();
+}
+
+function getExportFilename() {
+    const customName = document.getElementById('export-custom-name')?.value.trim();
+    const format = document.querySelector('input[name="export-format"]:checked')?.value || 'json';
+    
+    if (customName) {
+        // Use custom name, ensure correct extension
+        const base = customName.replace(/\.(json|csv)$/i, '');
+        return `${base}.${format}`;
+    }
+    
+    // Build from active chips
+    const chips = document.querySelectorAll('#export-path-chips .export-chip.active');
+    const parts = Array.from(chips).map(c => c.textContent);
+    
+    if (parts.length === 0) {
+        return `nova_export.${format}`;
+    }
+    
+    return `nova_${parts.join('_')}.${format}`;
+}
+
+function updateExportPreview() {
+    const preview = document.getElementById('export-preview');
+    if (preview) {
+        preview.textContent = getExportFilename();
+    }
+}
+
+function performExport() {
+    const filename = getExportFilename();
+    const format = document.querySelector('input[name="export-format"]:checked')?.value || 'json';
+    
+    if (format === 'csv') {
+        exportAnnotationsCSV(filename);
+    } else {
+        exportAnnotationsJSON(filename);
+    }
+}
+
+function exportAnnotationsJSON(filename) {
     const master = state.modalities.find(m => m.id === state.masterModalityId);
     
     const data = {
@@ -2481,9 +2632,403 @@ function exportAnnotations() {
     
     const a = document.createElement('a');
     a.href = url;
-    a.download = `nova_${master?.name || 'annotations'}_${state.annotatorName || 'anon'}.json`;
+    a.download = filename || 'nova_export.json';
     a.click();
     URL.revokeObjectURL(url);
+}
+
+// ============================================
+// Import Annotations (JSON)
+// ============================================
+
+function importAnnotationsJSON(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        try {
+            const data = JSON.parse(evt.target.result);
+            
+            // Import layers if present
+            if (data.layers && Array.isArray(data.layers)) {
+                state.layers = data.layers;
+                // Ensure annotations arrays exist for each layer
+                state.layers.forEach(l => {
+                    if (!state.annotations[l.id]) state.annotations[l.id] = [];
+                });
+            }
+            
+            // Import annotations
+            if (data.annotations) {
+                Object.keys(data.annotations).forEach(layerId => {
+                    state.annotations[layerId] = data.annotations[layerId];
+                });
+            }
+            
+            // Import annotator name if present
+            if (data.meta?.annotator) {
+                state.annotatorName = data.meta.annotator;
+                const nameEl = document.getElementById('annotator-name');
+                if (nameEl) nameEl.value = data.meta.annotator;
+            }
+            
+            renderSettings();
+            renderAnnotationsList();
+            renderTimelines();
+            updateAnnotationControls();
+            showNotification(`Imported annotations from ${file.name}`);
+        } catch (err) {
+            alert('Failed to parse annotation file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+}
+
+// ============================================
+// CSV Export / Import
+// ============================================
+
+function exportAnnotationsCSV(filename) {
+    const allAnnotations = [];
+    state.layers.forEach(layer => {
+        (state.annotations[layer.id] || []).forEach(ann => {
+            allAnnotations.push({
+                layer: layer.name,
+                label: ann.typeName,
+                start_s: ann.startTime.toFixed(3),
+                end_s: ann.endTime.toFixed(3),
+                comment: ann.comment || '',
+            });
+        });
+    });
+    
+    if (allAnnotations.length === 0) {
+        showNotification('No annotations to export');
+        return;
+    }
+    
+    const header = 'layer,label,start_s,end_s,comment';
+    const rows = allAnnotations.map(a => 
+        `${csvEscape(a.layer)},${csvEscape(a.label)},${a.start_s},${a.end_s},${csvEscape(a.comment)}`
+    );
+    const csv = [header, ...rows].join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'nova_export.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function csvEscape(value) {
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+}
+
+function importAnnotationsCSV(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        try {
+            const text = evt.target.result;
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) {
+                alert('CSV file is empty or has no data rows');
+                return;
+            }
+            
+            // Parse header
+            const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+            const layerIdx = header.indexOf('layer');
+            const labelIdx = header.indexOf('label');
+            const startIdx = header.indexOf('start_s');
+            const endIdx = header.indexOf('end_s');
+            const commentIdx = header.indexOf('comment');
+            
+            if (labelIdx === -1 || startIdx === -1 || endIdx === -1) {
+                alert('CSV must have columns: label, start_s, end_s');
+                return;
+            }
+            
+            let imported = 0;
+            for (let i = 1; i < lines.length; i++) {
+                const cols = parseCSVLine(lines[i]);
+                const layerName = layerIdx >= 0 ? cols[layerIdx]?.trim() : null;
+                const label = cols[labelIdx]?.trim();
+                const startTime = parseFloat(cols[startIdx]);
+                const endTime = parseFloat(cols[endIdx]);
+                const comment = commentIdx >= 0 ? cols[commentIdx]?.trim() : '';
+                
+                if (!label || isNaN(startTime) || isNaN(endTime)) continue;
+                
+                // Find matching layer and type
+                let targetLayer = null;
+                let targetType = null;
+                
+                for (const layer of state.layers) {
+                    if (layerName && layer.name !== layerName) continue;
+                    const type = layer.types.find(t => t.name === label);
+                    if (type) {
+                        targetLayer = layer;
+                        targetType = type;
+                        break;
+                    }
+                }
+                
+                if (!targetLayer || !targetType) continue;
+                
+                if (!state.annotations[targetLayer.id]) {
+                    state.annotations[targetLayer.id] = [];
+                }
+                
+                state.annotations[targetLayer.id].push({
+                    id: Date.now() + i,
+                    typeId: targetType.id,
+                    typeName: targetType.name,
+                    startTime,
+                    endTime,
+                    layerId: targetLayer.id,
+                    comment: comment || undefined,
+                });
+                imported++;
+            }
+            
+            // Sort all layers
+            state.layers.forEach(l => {
+                if (state.annotations[l.id]) {
+                    state.annotations[l.id].sort((a, b) => a.startTime - b.startTime);
+                }
+            });
+            
+            renderAnnotationsList();
+            renderTimelines();
+            showNotification(`Imported ${imported} annotations from CSV`);
+        } catch (err) {
+            alert('Failed to parse CSV: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+}
+
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else if (ch === '"') {
+                inQuotes = false;
+            } else {
+                current += ch;
+            }
+        } else {
+            if (ch === '"') {
+                inQuotes = true;
+            } else if (ch === ',') {
+                result.push(current);
+                current = '';
+            } else {
+                current += ch;
+            }
+        }
+    }
+    result.push(current);
+    return result;
+}
+
+// ============================================
+// Layers Import / Export
+// ============================================
+
+function exportLayersJSON() {
+    const json = JSON.stringify(state.layers, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'nova_layers.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importLayersJSON(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        try {
+            const layers = JSON.parse(evt.target.result);
+            if (!Array.isArray(layers)) {
+                alert('Layer file must contain a JSON array');
+                return;
+            }
+            
+            state.layers = layers;
+            state.layers.forEach(l => {
+                if (!state.annotations[l.id]) state.annotations[l.id] = [];
+            });
+            
+            // Set first layer as active
+            if (state.layers.length > 0) {
+                state.activeLayerId = state.layers[0].id;
+            }
+            
+            renderSettings();
+            renderAnnotationsList();
+            renderTimelines();
+            updateAnnotationControls();
+            showNotification(`Imported ${layers.length} layers from ${file.name}`);
+        } catch (err) {
+            alert('Failed to parse layers file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+}
+
+// ============================================
+// Mute & Volume
+// ============================================
+
+function toggleMute() {
+    const videos = document.querySelectorAll('video');
+    const btn = document.getElementById('mute-btn');
+    const slider = document.getElementById('volume-slider');
+    
+    if (videos.length === 0) return;
+    
+    const isMuted = videos[0].muted;
+    videos.forEach(v => v.muted = !isMuted);
+    
+    if (btn) btn.textContent = isMuted ? '🔊' : '🔇';
+    if (slider && !isMuted) slider.value = 0;
+    if (slider && isMuted) slider.value = videos[0].volume;
+}
+
+function handleVolumeChange(e) {
+    const volume = parseFloat(e.target.value);
+    const videos = document.querySelectorAll('video');
+    const btn = document.getElementById('mute-btn');
+    
+    videos.forEach(v => {
+        v.volume = volume;
+        v.muted = volume === 0;
+    });
+    
+    if (btn) {
+        if (volume === 0) btn.textContent = '🔇';
+        else if (volume < 0.5) btn.textContent = '🔉';
+        else btn.textContent = '🔊';
+    }
+}
+
+// ============================================
+// Annotation Edit (inline form)
+// ============================================
+
+function editAnnotation(layerId, annId) {
+    const anns = state.annotations[layerId];
+    if (!anns) return;
+    const ann = anns.find(a => a.id === annId);
+    if (!ann) return;
+    
+    const layer = state.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    const container = document.getElementById('annotations-list');
+    if (!container) return;
+    
+    // Find the annotation item element
+    const items = container.querySelectorAll('.annotation-item');
+    let targetItem = null;
+    items.forEach(item => {
+        if (item.dataset.annId == annId) targetItem = item;
+    });
+    
+    // Check if edit form already exists
+    const existing = document.getElementById('edit-form-' + annId);
+    if (existing) {
+        existing.remove();
+        return;
+    }
+    
+    const form = document.createElement('div');
+    form.className = 'annotation-edit-form';
+    form.id = 'edit-form-' + annId;
+    
+    const typeOptions = layer.types.map(t => 
+        `<option value="${t.id}" ${t.id === ann.typeId ? 'selected' : ''}>${t.name}</option>`
+    ).join('');
+    
+    form.innerHTML = `
+        <label>Label</label>
+        <select id="edit-type-${annId}">${typeOptions}</select>
+        <label>Start (seconds)</label>
+        <input type="number" id="edit-start-${annId}" value="${ann.startTime.toFixed(3)}" step="0.001">
+        <label>End (seconds)</label>
+        <input type="number" id="edit-end-${annId}" value="${ann.endTime.toFixed(3)}" step="0.001">
+        <label>Comment</label>
+        <textarea id="edit-comment-${annId}" placeholder="Add a note...">${ann.comment || ''}</textarea>
+        <div class="edit-form-actions">
+            <button class="btn btn-sm btn-primary" onclick="saveAnnotationEdit('${layerId}', ${annId})">Save</button>
+            <button class="btn btn-sm" onclick="document.getElementById('edit-form-${annId}')?.remove()">Cancel</button>
+        </div>
+    `;
+    
+    if (targetItem) {
+        targetItem.after(form);
+    } else {
+        container.appendChild(form);
+    }
+}
+
+function saveAnnotationEdit(layerId, annId) {
+    const anns = state.annotations[layerId];
+    if (!anns) return;
+    const ann = anns.find(a => a.id === annId);
+    if (!ann) return;
+    
+    const layer = state.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    const typeSelect = document.getElementById('edit-type-' + annId);
+    const startInput = document.getElementById('edit-start-' + annId);
+    const endInput = document.getElementById('edit-end-' + annId);
+    const commentInput = document.getElementById('edit-comment-' + annId);
+    
+    if (typeSelect) {
+        const newType = layer.types.find(t => t.id === typeSelect.value);
+        if (newType) {
+            ann.typeId = newType.id;
+            ann.typeName = newType.name;
+        }
+    }
+    
+    if (startInput) ann.startTime = parseFloat(startInput.value);
+    if (endInput) ann.endTime = parseFloat(endInput.value);
+    if (commentInput) ann.comment = commentInput.value.trim() || undefined;
+    
+    // Re-sort
+    anns.sort((a, b) => a.startTime - b.startTime);
+    
+    renderAnnotationsList();
+    renderTimelines();
 }
 
 // ============================================
