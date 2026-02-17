@@ -3019,7 +3019,8 @@ function saveAnnotationEdit(layerId, annId) {
     const commentInput = document.getElementById('edit-comment-' + annId);
     
     if (typeSelect) {
-        const newType = layer.types.find(t => t.id === typeSelect.value);
+        const selectedValue = isNaN(typeSelect.value) ? typeSelect.value : parseInt(typeSelect.value);
+        const newType = layer.types.find(t => t.id === selectedValue);
         if (newType) {
             ann.typeId = newType.id;
             ann.typeName = newType.name;
