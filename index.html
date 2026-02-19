@@ -38,6 +38,9 @@
                 <button id="settings-btn" class="btn btn-icon" title="Settings">
                     ⚙️
                 </button>
+                <button id="mode-toggle-btn" class="btn btn-secondary" title="Switch to Review Mode">
+                    Review
+                </button>
             </div>
         </header>
 
@@ -115,7 +118,7 @@
             </aside>
 
             <!-- Annotation Panel -->
-            <aside class="annotation-panel">
+            <aside class="annotation-panel" id="annotation-panel">
                 <!-- Layer Tabs -->
                 <div id="mode-tabs" class="mode-tabs">
                     <!-- Dynamically generated -->
@@ -160,6 +163,21 @@
                     <h3>Annotations <span id="annotation-count">(0)</span></h3>
                     <div class="annotations-list" id="annotations-list">
                         <!-- Dynamically generated -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Feedback Review Panel -->
+            <aside class="feedback-panel" id="feedback-panel" style="display: none;">
+                <div class="feedback-header">
+                    <h3>Feedback Review</h3>
+                    <button id="feedback-import-btn" class="btn btn-sm btn-secondary">Import</button>
+                    <input type="file" id="feedback-import-input" accept=".json" hidden>
+                </div>
+                <div class="feedback-body" id="feedback-body">
+                    <div class="feedback-empty">
+                        <p>No feedback loaded.</p>
+                        <p>Click <strong>Import</strong> to load a result JSON.</p>
                     </div>
                 </div>
             </aside>

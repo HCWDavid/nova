@@ -2117,6 +2117,291 @@ body.resize-mode .resize-mode-overlay {
     margin-top: 16px;
 }
 
+/* ============================================
+   Feedback Review Panel
+   ============================================ */
+
+.feedback-panel {
+    width: 340px;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.feedback-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.feedback-header h3 {
+    flex: 1;
+    font-size: 1rem;
+    margin: 0;
+}
+
+.feedback-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-md);
+    min-height: 0;
+}
+
+.feedback-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--spacing-xl) var(--spacing-md);
+}
+
+.feedback-section {
+    margin-bottom: var(--spacing-lg);
+}
+
+.feedback-section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: var(--spacing-sm);
+}
+
+.feedback-model-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+}
+
+.feedback-model-tag {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+/* Checklist */
+.feedback-checklist-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-xs);
+    font-size: 0.85rem;
+}
+
+.feedback-checklist-item .status-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.status-badge.completed {
+    background: rgba(46, 213, 115, 0.15);
+    color: #2ed573;
+}
+
+.status-badge.partial {
+    background: rgba(255, 165, 0, 0.15);
+    color: #ffa502;
+}
+
+.status-badge.missed {
+    background: rgba(255, 71, 87, 0.15);
+    color: #ff4757;
+}
+
+.feedback-checklist-item .item-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.feedback-checklist-item .item-phase {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.feedback-checklist-item .item-evidence {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    font-style: italic;
+}
+
+/* Communication Rating */
+.feedback-rating {
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+}
+
+.feedback-rating .star-filled {
+    color: #ffa502;
+}
+
+.feedback-rating .star-empty {
+    color: var(--text-muted);
+    opacity: 0.3;
+}
+
+/* Visual Verifications */
+.feedback-verification {
+    padding: var(--spacing-sm);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-xs);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border-left: 3px solid var(--primary);
+}
+
+.feedback-verification:hover {
+    background: var(--bg-hover);
+    border-left-color: var(--accent);
+}
+
+.feedback-verification .v-action {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.feedback-verification .v-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.feedback-verification .v-analysis {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+/* Overall Assessment */
+.feedback-assessment {
+    padding: var(--spacing-md);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    border-left: 3px solid var(--accent);
+}
+
+/* Summary Bar */
+.feedback-summary-bar {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-md);
+}
+
+.feedback-score-row {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-xs);
+}
+
+.score-pill {
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 12px;
+}
+
+.score-pill.completed { background: rgba(46, 213, 115, 0.15); color: #2ed573; }
+.score-pill.partial { background: rgba(255, 165, 0, 0.15); color: #ffa502; }
+.score-pill.missed { background: rgba(255, 71, 87, 0.15); color: #ff4757; }
+
+.feedback-comm-row {
+    font-size: 0.85rem;
+    margin-top: var(--spacing-xs);
+}
+
+.feedback-revision-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: var(--spacing-xs);
+    font-style: italic;
+}
+
+.feedback-scenario {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Revision & Confidence */
+.feedback-checklist-item.revised {
+    border-left: 3px solid var(--accent);
+}
+
+.revision-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(116, 185, 255, 0.15);
+    color: #74b9ff;
+    margin-top: 4px;
+}
+
+.item-revision {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    font-style: italic;
+}
+
+.item-name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.confidence-tag {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+
+.confidence-tag.high { background: rgba(46, 213, 115, 0.1); color: #2ed573; }
+.confidence-tag.low { background: rgba(255, 165, 0, 0.1); color: #ffa502; }
+.confidence-tag.verified { background: rgba(116, 185, 255, 0.15); color: #74b9ff; }
+
+/* Visual verification question */
+.v-question {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-style: italic;
+}
+
+/* Mode toggle active state */
+#mode-toggle-btn.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
 /* Settings actions wrap */
 .settings-actions {
     flex-wrap: wrap;

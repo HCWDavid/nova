@@ -145,6 +145,10 @@ const state = {
     // Transcript
     transcript: null,
     exportSourcePath: '',
+    
+    // Feedback Review
+    appMode: 'annotate', // 'annotate' | 'review'
+    feedbackData: null,
 };
 
 // ============================================
@@ -250,6 +254,14 @@ function setupEventListeners() {
     // Settings
     document.getElementById('settings-btn')?.addEventListener('click', openSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+    
+    // Mode Toggle (Annotate / Review)
+    document.getElementById('mode-toggle-btn')?.addEventListener('click', toggleAppMode);
+    document.getElementById('feedback-import-btn')?.addEventListener('click', () => {
+        document.getElementById('feedback-import-input')?.click();
+    });
+    document.getElementById('feedback-import-input')?.addEventListener('change', importFeedbackJSON);
+    
     document.getElementById('settings-modal')?.addEventListener('click', (e) => {
         if (e.target.id === 'settings-modal') closeSettings();
     });
@@ -3036,6 +3048,203 @@ function saveAnnotationEdit(layerId, annId) {
     
     renderAnnotationsList();
     renderTimelines();
+}
+
+// ============================================
+// Feedback Review Mode
+// ============================================
+
+function toggleAppMode() {
+    const btn = document.getElementById('mode-toggle-btn');
+    const annPanel = document.getElementById('annotation-panel');
+    const fbPanel = document.getElementById('feedback-panel');
+    if (!btn || !annPanel || !fbPanel) return;
+    
+    if (state.appMode === 'annotate') {
+        state.appMode = 'review';
+        annPanel.style.display = 'none';
+        fbPanel.style.display = 'flex';
+        btn.textContent = 'Annotate';
+        btn.classList.add('active');
+    } else {
+        state.appMode = 'annotate';
+        annPanel.style.display = 'flex';
+        fbPanel.style.display = 'none';
+        btn.textContent = 'Review';
+        btn.classList.remove('active');
+    }
+}
+
+function importFeedbackJSON(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        try {
+            state.feedbackData = JSON.parse(evt.target.result);
+            renderFeedbackPanel();
+            showNotification(`Loaded feedback from ${file.name}`);
+        } catch (err) {
+            alert('Failed to parse feedback JSON: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+}
+
+function renderFeedbackPanel() {
+    const body = document.getElementById('feedback-body');
+    if (!body) return;
+    
+    const data = state.feedbackData;
+    if (!data) {
+        body.innerHTML = '<div class="feedback-empty"><p>No feedback loaded.</p><p>Click <strong>Import</strong> to load a result JSON.</p></div>';
+        return;
+    }
+    
+    let html = '';
+    
+    // Detect 3-pass vs old format
+    const hasPasses = !!(data.pass3_final || data.pass1_initial);
+    const finalPass = data.pass3_final || data.pass1_initial || data.orchestrator || {};
+    const visualPass = data.pass2_visual || data.visual_verifications || [];
+    const checklist = finalPass.checklist || [];
+    
+    // ── Summary Bar ──
+    if (checklist.length > 0) {
+        const counts = { COMPLETED: 0, PARTIAL: 0, MISSED: 0 };
+        checklist.forEach(item => {
+            const s = (item.final_status || item.status || item.initial_status || '').toUpperCase();
+            if (counts[s] !== undefined) counts[s]++;
+        });
+        const total = checklist.length;
+        const revisions = checklist.filter(c => c.revision_note).length;
+        
+        html += '<div class="feedback-section feedback-summary-bar">';
+        html += `<div class="feedback-score-row">
+            <span class="score-pill completed">${counts.COMPLETED}/${total}</span>
+            <span class="score-pill partial">${counts.PARTIAL} partial</span>
+            <span class="score-pill missed">${counts.MISSED} missed</span>
+        </div>`;
+        
+        const commRating = finalPass.communication_rating;
+        if (commRating != null) {
+            html += `<div class="feedback-comm-row">Comm: ${buildStars(Math.round(commRating))}</div>`;
+        }
+        
+        if (revisions > 0) {
+            html += `<div class="feedback-revision-count">${revisions} item${revisions > 1 ? 's' : ''} revised after visual check</div>`;
+        }
+        html += '</div>';
+    }
+    
+    // ── Models & Scenario ──
+    if (data.models || data.scenario) {
+        html += '<div class="feedback-section">';
+        if (data.scenario) {
+            html += `<div class="feedback-scenario">${escapeHtml(data.scenario)}</div>`;
+        }
+        if (data.models) {
+            html += '<div class="feedback-model-info">';
+            Object.entries(data.models).forEach(([role, name]) => {
+                html += `<span class="feedback-model-tag">${escapeHtml(role)}: ${escapeHtml(name)}</span>`;
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+    
+    // ── Final Checklist ──
+    if (checklist.length > 0) {
+        const label = hasPasses ? 'Final Checklist' : 'Checklist';
+        html += '<div class="feedback-section">';
+        html += `<div class="feedback-section-title">${label}</div>`;
+        checklist.forEach(item => {
+            const status = (item.final_status || item.status || item.initial_status || '').toUpperCase();
+            let badgeClass = 'completed';
+            if (status === 'PARTIAL') badgeClass = 'partial';
+            else if (status === 'MISSED') badgeClass = 'missed';
+            
+            let revisionHtml = '';
+            if (item.revision_note) {
+                const initialStatus = (item.initial_status || '').toUpperCase();
+                revisionHtml = `<div class="revision-badge">${initialStatus} → ${status}</div>`;
+                revisionHtml += `<div class="item-revision">${escapeHtml(item.revision_note)}</div>`;
+            }
+            
+            const confidence = item.confidence ? `<span class="confidence-tag ${item.confidence.toLowerCase()}">${item.confidence}</span>` : '';
+            const evidence = item.evidence ? `<div class="item-evidence">${escapeHtml(item.evidence)}</div>` : '';
+            const phase = item.phase ? `<div class="item-phase">${escapeHtml(item.phase)}</div>` : '';
+            
+            html += `<div class="feedback-checklist-item${item.revision_note ? ' revised' : ''}">
+                <span class="status-badge ${badgeClass}">${status}</span>
+                <div class="item-text">
+                    <div class="item-name-row">${escapeHtml(item.item || '')} ${confidence}</div>
+                    ${phase}
+                    ${evidence}
+                    ${revisionHtml}
+                </div>
+            </div>`;
+        });
+        html += '</div>';
+    }
+    
+    // ── Visual Verifications (pass2) ──
+    if (visualPass.length > 0) {
+        html += '<div class="feedback-section">';
+        html += '<div class="feedback-section-title">Visual Verifications</div>';
+        visualPass.forEach((v, i) => {
+            const startSec = v.start ?? 0;
+            const endSec = v.end ?? startSec;
+            const timeStr = formatTime(startSec * 1000) + ' → ' + formatTime(endSec * 1000);
+            const question = v.question || v.verify_question || '';
+            const answer = v.visual_answer || v.analysis || '';
+            
+            html += `<div class="feedback-verification" onclick="seekToFeedback(${startSec})">
+                <div class="v-action">${escapeHtml(v.item || v.action || 'Check ' + (i + 1))}</div>
+                <div class="v-time">${timeStr}${v.n_frames ? ' (' + v.n_frames + ' frames)' : ''}</div>
+                ${question ? `<div class="v-question">Q: ${escapeHtml(question)}</div>` : ''}
+                ${answer ? `<div class="v-analysis">${escapeHtml(answer)}</div>` : ''}
+            </div>`;
+        });
+        html += '</div>';
+    }
+    
+    // ── Overall Assessment ──
+    if (finalPass.overall_assessment) {
+        html += '<div class="feedback-section">';
+        html += '<div class="feedback-section-title">Overall Assessment</div>';
+        html += `<div class="feedback-assessment">${escapeHtml(finalPass.overall_assessment)}</div>`;
+        html += '</div>';
+    }
+    
+    body.innerHTML = html || '<div class="feedback-empty"><p>Feedback has no displayable content.</p></div>';
+}
+
+function buildStars(rating, max) {
+    max = max || 5;
+    let s = '';
+    for (let i = 1; i <= max; i++) {
+        s += i <= rating
+            ? '<span class="star-filled">★</span>'
+            : '<span class="star-empty">★</span>';
+    }
+    return s;
+}
+
+function seekToFeedback(startSec) {
+    const slider = document.getElementById('seek-slider');
+    if (slider) {
+        slider.value = startSec * 1000;
+        handleSeek();
+    }
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
 }
 
 // ============================================

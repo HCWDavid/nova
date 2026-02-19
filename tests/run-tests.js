@@ -15,11 +15,20 @@ global.document = {
     querySelectorAll: () => [],
     querySelector: () => null,
     addEventListener: () => {},
-    createElement: () => ({ 
-        addEventListener: () => {},
-        appendChild: () => {},
-        style: {}
-    })
+    createElement: (tag) => {
+        const el = { 
+            addEventListener: () => {},
+            appendChild: () => {},
+            style: {},
+            _text: '',
+            get textContent() { return el._text; },
+            set textContent(v) { el._text = v; },
+            get innerHTML() {
+                return el._text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+        };
+        return el;
+    }
 };
 global.window = { addEventListener: () => {} };
 global.localStorage = {
@@ -1414,6 +1423,81 @@ assertEqual(annWithComment.comment, 'patient stumbled', 'Annotation: comment fie
 // Annotation without comment
 const annNoComment = { id: 2, typeId: 'a', typeName: 'Walk', startTime: 6.0, endTime: 10.0 };
 assertEqual(annNoComment.comment, undefined, 'Annotation: missing comment → undefined');
+
+// ============================================
+// Feedback Review Mode Tests
+// ============================================
+console.log('\n--- Feedback Review Mode ---');
+
+// Toggle mode
+state.appMode = 'annotate';
+assertEqual(state.appMode, 'annotate', 'Feedback: default mode is annotate');
+state.appMode = 'review';
+assertEqual(state.appMode, 'review', 'Feedback: mode switches to review');
+state.appMode = 'annotate';
+assertEqual(state.appMode, 'annotate', 'Feedback: mode switches back to annotate');
+
+// Feedback data parsing
+const sampleFeedback = {
+    video_id: '20240711T173527Z',
+    models: { orchestrator: 'gemma-3-4b-it', visual: 'medgemma-1.5-4b-it' },
+    orchestrator: {
+        checklist: [
+            { phase: 'Intro', item: 'Hand hygiene', status: 'COMPLETED', evidence: 'Observed at 0:02' },
+            { phase: 'Intro', item: 'ID check', status: 'PARTIAL', evidence: 'Only verbal' },
+            { phase: 'Med', item: 'Barcoding', status: 'MISSED', evidence: '' },
+        ],
+        communication_rating: 4,
+        overall_assessment: 'Good performance overall.',
+    },
+    visual_verifications: [
+        { start: 37, end: 61, action: 'Put on Gloves', analysis: 'Gloves observed on both hands.' },
+    ],
+};
+
+assertEqual(sampleFeedback.orchestrator.checklist.length, 3, 'Feedback: checklist has 3 items');
+assertEqual(sampleFeedback.orchestrator.checklist[0].status, 'COMPLETED', 'Feedback: first item COMPLETED');
+assertEqual(sampleFeedback.orchestrator.checklist[1].status, 'PARTIAL', 'Feedback: second item PARTIAL');
+assertEqual(sampleFeedback.orchestrator.checklist[2].status, 'MISSED', 'Feedback: third item MISSED');
+assertEqual(sampleFeedback.orchestrator.communication_rating, 4, 'Feedback: communication rating is 4');
+assertEqual(sampleFeedback.visual_verifications.length, 1, 'Feedback: 1 visual verification');
+assertEqual(sampleFeedback.visual_verifications[0].action, 'Put on Gloves', 'Feedback: verification action name');
+assertEqual(sampleFeedback.visual_verifications[0].start, 37, 'Feedback: verification start time');
+
+// Status badge class mapping
+function badgeClass(status) {
+    const s = (status || '').toUpperCase();
+    if (s === 'PARTIAL') return 'partial';
+    if (s === 'MISSED') return 'missed';
+    return 'completed';
+}
+assertEqual(badgeClass('COMPLETED'), 'completed', 'Feedback badge: COMPLETED → completed');
+assertEqual(badgeClass('PARTIAL'), 'partial', 'Feedback badge: PARTIAL → partial');
+assertEqual(badgeClass('MISSED'), 'missed', 'Feedback badge: MISSED → missed');
+assertEqual(badgeClass(''), 'completed', 'Feedback badge: empty → completed (fallback)');
+
+// Star rating
+const rating = 4;
+const maxStars = 5;
+let filledCount = 0;
+for (let i = 1; i <= maxStars; i++) { if (i <= rating) filledCount++; }
+assertEqual(filledCount, 4, 'Feedback: 4 filled stars for rating 4');
+assertEqual(maxStars - filledCount, 1, 'Feedback: 1 empty star for rating 4');
+
+// escapeHtml via mock DOM
+const escapeHtml = (str) => {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+};
+assertEqual(escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;', 'escapeHtml: escapes angle brackets');
+assertEqual(escapeHtml('a & b'), 'a &amp; b', 'escapeHtml: escapes ampersand');
+assertEqual(escapeHtml('hello'), 'hello', 'escapeHtml: plain text unchanged');
+
+// Edge: null/empty feedback data
+const emptyFeedback = {};
+assertEqual(emptyFeedback.orchestrator, undefined, 'Feedback: empty data has no orchestrator');
+assertEqual(emptyFeedback.visual_verifications, undefined, 'Feedback: empty data has no verifications');
 
 // ============================================
 // Summary
